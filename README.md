@@ -1,21 +1,24 @@
-# @phumu/typed-fetch
+# @phumudzo/typed-fetch
 
 Privacy-first, status-aware typed fetch that learns response shapes and generates TypeScript types.
 
 ## Install
 
 ```bash
-npm install @phumu/typed-fetch
+npm install @phumudzo/typed-fetch
 ```
 
 ## Runtime Usage
 
 ```ts
-import { typedFetch } from "@phumu/typed-fetch";
+import { typedFetch } from "@phumudzo/typed-fetch";
 
-const result = await typedFetch("https://api.example.com/users/123?include=posts", {
-  method: "GET",
-});
+const result = await typedFetch(
+  "https://api.example.com/users/123?include=posts",
+  {
+    method: "GET",
+  },
+);
 
 if (result.status === 200) {
   console.log(result.data);
@@ -23,12 +26,14 @@ if (result.status === 200) {
 ```
 
 `typedFetch`:
+
 - auto-detects endpoint keys (`METHOD /path?queryKeys`)
 - captures response shape by HTTP status
 - stores only structural metadata (never payload values)
 - returns `{ endpoint, status, ok, data, response }`
 
 Observation runtime behavior:
+
 - `observerMode: "auto"` (default): filesystem in Node, `localStorage` in browser if available
 - `observerMode: "file"`: force filesystem registry writes
 - `observerMode: "localStorage"`: force browser storage writes
@@ -45,7 +50,7 @@ npm run generate
 This emits `generated/typed-fetch.d.ts` and augments:
 
 ```ts
-declare module "@phumu/typed-fetch" {
+declare module "@phumudzo/typed-fetch" {
   interface TypedFetchGeneratedResponses {
     "GET /users/:param?include": {
       200: { id: number; name: string };
@@ -67,6 +72,7 @@ typed-fetch clean --registry
 ```
 
 Sync listener endpoint:
+
 - `POST /sync` with observation payloads (used by `syncUrl`)
 - `GET /health` for health checks
 - default safety: localhost-only clients and local origins only
@@ -95,6 +101,7 @@ Use `typed-fetch.config.json` in your project root:
 ```
 
 Persistence workflow:
+
 1. Run `typed-fetch listen` during development.
 2. Use `typedFetch` in both server and client with `syncUrl` set.
 3. Commit `.typed-fetch/registry.json` and generated type files to keep types persistent across pushes.

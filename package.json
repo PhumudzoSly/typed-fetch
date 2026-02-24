@@ -1,5 +1,5 @@
 {
-  "name": "@phumu/typed-fetch",
+  "name": "@phumudzo/typed-fetch",
   "version": "0.0.1",
   "description": "Privacy-first status-aware typed fetch with type generation from response shapes",
   "main": "dist/index.js",
