@@ -61,6 +61,7 @@ export function generateTypes(
 ): {
   outputPath: string;
   content: string;
+  warnings: string[];
 } {
   const config = loadConfig(configOverrides);
   const registry = loadRegistry(config.registryPath);
@@ -79,7 +80,17 @@ export {};
 `;
 
   writeFile(config.generatedPath, content);
-  return { outputPath: config.generatedPath, content };
+  const warnings: string[] = [];
+  for (const [endpointKey, endpoint] of stableSortedEntries(registry.endpoints)) {
+    const observedPaths = endpoint.meta.observedPaths ?? [];
+    if (observedPaths.length > 1) {
+      warnings.push(
+        `Potential endpoint-key collision for "${endpointKey}": ${observedPaths.join(", ")}`,
+      );
+    }
+  }
+
+  return { outputPath: config.generatedPath, content, warnings };
 }
 
 export function checkTypes(configOverrides: Partial<TypedFetchConfig> = {}): {

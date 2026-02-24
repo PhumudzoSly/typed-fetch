@@ -51,6 +51,9 @@ async function run(): Promise<void> {
     .action(() => {
       const result = generateTypes();
       process.stdout.write(`${pc.green("Generated")} ${result.outputPath}\n`);
+      for (const warning of result.warnings) {
+        process.stdout.write(`${pc.yellow("Warning")} ${warning}\n`);
+      }
     });
 
   program

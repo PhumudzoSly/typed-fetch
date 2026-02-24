@@ -109,6 +109,7 @@ function typedFetch(input, init, options) {
                         endpointKey: observation.endpointKey,
                         status: observation.status,
                         shape: observation.shape,
+                        rawPath: pathname,
                     });
                     (0, registry_1.saveRegistry)(config.registryPath, registry);
                 }
@@ -120,6 +121,7 @@ function typedFetch(input, init, options) {
                         endpointKey: observation.endpointKey,
                         status: observation.status,
                         shape: observation.shape,
+                        rawPath: pathname,
                     });
                     (0, browser_registry_1.saveBrowserRegistry)(config.browserStorageKey, registry);
                 }

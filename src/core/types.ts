@@ -20,6 +20,7 @@ export type EndpointBucket = {
   meta: {
     seenCount: number;
     lastSeenAt: string;
+    observedPaths?: string[];
   };
 };
 

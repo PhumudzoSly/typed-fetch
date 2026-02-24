@@ -158,6 +158,7 @@ export async function typedFetch<K extends string = string>(
           endpointKey: observation.endpointKey,
           status: observation.status,
           shape: observation.shape,
+          rawPath: pathname,
         });
         saveRegistry(config.registryPath, registry);
       } else if (
@@ -170,6 +171,7 @@ export async function typedFetch<K extends string = string>(
           endpointKey: observation.endpointKey,
           status: observation.status,
           shape: observation.shape,
+          rawPath: pathname,
         });
         saveBrowserRegistry(config.browserStorageKey, registry);
       }

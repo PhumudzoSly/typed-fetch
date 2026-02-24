@@ -78,6 +78,7 @@ function applyObservation(registryPath: string, observation: ObservationPayload)
     status: observation.status,
     shape: observation.shape,
     observedAt: new Date(observation.observedAt),
+    rawPath: undefined,
   });
   saveRegistry(registryPath, registry);
 }

@@ -106,6 +106,7 @@ export function observeShape(args: {
   status: number;
   shape: ShapeNode;
   observedAt?: Date;
+  rawPath?: string;
 }): Registry {
   const registry = args.registry;
   const endpoint = registry.endpoints[args.endpointKey] ?? {
@@ -113,6 +114,7 @@ export function observeShape(args: {
     meta: {
       seenCount: 0,
       lastSeenAt: new Date(0).toISOString(),
+      observedPaths: [],
     },
   };
 
@@ -126,6 +128,18 @@ export function observeShape(args: {
   endpoint.meta = {
     seenCount: endpoint.meta.seenCount + 1,
     lastSeenAt: (args.observedAt ?? new Date()).toISOString(),
+    observedPaths: (() => {
+      const current = Array.isArray(endpoint.meta.observedPaths)
+        ? endpoint.meta.observedPaths
+        : [];
+      if (!args.rawPath) {
+        return current;
+      }
+      if (current.includes(args.rawPath)) {
+        return current;
+      }
+      return [...current, args.rawPath].slice(0, 20);
+    })(),
   };
 
   registry.endpoints[args.endpointKey] = endpoint;
