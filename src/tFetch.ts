@@ -1,122 +1,212 @@
-type HttpVerbs =
-  | "POST"
-  | "PUT"
-  | "DELETE"
-  | "UPDATE"
-  | "GET"
-  | "CONNECT"
-  | "HEAD"
-  | "OPTIONS";
+import { loadConfig } from "./core/config";
+import { hasLocalStorage, loadBrowserRegistry, saveBrowserRegistry } from "./core/browser-registry";
+import { shouldTrackEndpoint } from "./core/filter";
+import { normalizeEndpointKey } from "./core/normalize";
+import { loadRegistry, observeShape, saveRegistry } from "./core/registry";
+import { inferShape } from "./core/shape";
+import { pushObservation } from "./core/sync";
+import type {
+  ObservationPayload,
+  ShapeNode,
+  TypedFetchConfig,
+  TypedFetchRequestInit,
+  TypedFetchSuccessStatuses,
+} from "./core/types";
 
-type WithBody = Extract<HttpVerbs, "POST" | "PUT" | "DELETE" | "UPDATE">;
-type NonBody = Exclude<HttpVerbs, WithBody>;
+type FetchFunction = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
-type MethodBodyCombination =
-  | { method?: WithBody; body?: RequestInit["body"] }
-  | { method?: NonBody; body?: never };
+const isNodeRuntime =
+  typeof process !== "undefined" &&
+  Boolean(process.versions) &&
+  Boolean(process.versions.node);
 
-type MimeTypes =
-  | ".jpg"
-  | ".midi"
-  | "XML"
-  | "application/epub+zip"
-  | "application/gzip"
-  | "application/java-archive"
-  | "application/json"
-  | "application/ld+json"
-  | "application/msword"
-  | "application/octet-stream"
-  | "application/ogg"
-  | "application/pdf"
-  | "application/php"
-  | "application/rtf"
-  | "application/vnd.amazon.ebook"
-  | "application/vnd.apple.installer+xml"
-  | "application/vnd.mozilla.xul+xml"
-  | "application/vnd.ms-excel"
-  | "application/vnd.ms-fontobject"
-  | "application/vnd.ms-powerpoint"
-  | "application/vnd.oasis.opendocument.presentation"
-  | "application/vnd.oasis.opendocument.spreadsheet"
-  | "application/vnd.oasis.opendocument.text"
-  | "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-  | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-  | "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-  | "application/vnd.rar"
-  | "application/vnd.visio"
-  | "application/x-abiword"
-  | "application/x-bzip"
-  | "application/x-bzip2"
-  | "application/x-csh"
-  | "application/x-freearc"
-  | "application/x-sh"
-  | "application/x-shockwave-flash"
-  | "application/x-tar"
-  | "application/x-7z-compressed"
-  | "application/xhtml+xml"
-  | "application/zip"
-  | "audio/aac"
-  | "audio/mpeg"
-  | "audio/ogg"
-  | "audio/opus"
-  | "audio/wav"
-  | "audio/webm"
-  | "font/otf"
-  | "font/ttf"
-  | "font/woff"
-  | "font/woff2"
-  | "image/bmp"
-  | "image/gif"
-  | "image/png"
-  | "image/svg+xml"
-  | "image/tiff"
-  | "image/vnd.microsoft.icon"
-  | "image/webp"
-  | "text/calendar"
-  | "text/css"
-  | "text/csv"
-  | "text/html"
-  | "text/javascript"
-  | "text/plain"
-  | "video/3gpp"
-  | "video/3gpp2"
-  | "video/mp2t"
-  | "video/mpeg"
-  | "video/ogg"
-  | "video/webm"
-  | "video/x-msvideo";
+const fetchFunction: FetchFunction = (() => {
+  if (typeof fetch === "function") {
+    return fetch.bind(globalThis) as FetchFunction;
+  }
 
-type TypedHeaders = RequestInit["headers"] & PreparedHeaders;
+  if (isNodeRuntime) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const nodeFetch = require("node-fetch") as FetchFunction;
+    return nodeFetch;
+  }
 
-type PreparedHeaders = Partial<{
-  "Content-Type": MimeTypes;
-  Accept: MimeTypes;
-  Authorization: `Bearer ${string}`;
-}>;
+  throw new Error("No fetch implementation available in this runtime.");
+})();
 
-interface TypedResponse<T = unknown> extends Response {
-  json(): Promise<T>;
+function parsePathname(input: RequestInfo | URL): string {
+  if (typeof input === "string") {
+    return new URL(input, "http://typed-fetch.local").pathname;
+  }
+  if (input instanceof URL) {
+    return input.pathname;
+  }
+  const request = input as Request;
+  return new URL(request.url, "http://typed-fetch.local").pathname;
 }
 
-type TypedRequestInit = RequestInit &
-  MethodBodyCombination & { headers?: TypedHeaders };
-
-// Check if we are in a Node.js environment
-const isNode = typeof window === "undefined";
-
-// Conditionally import `node-fetch` in a Node.js environment
-let fetchFunction: typeof fetch;
-if (isNode) {
-  fetchFunction = require("node-fetch");
-} else {
-  fetchFunction = fetch;
+function isJsonContentType(contentType: string | null): boolean {
+  return Boolean(contentType && contentType.toLowerCase().includes("application/json"));
 }
 
-function tFetch<ResponseType = unknown>(
+function isNodeWritableRuntime(): boolean {
+  return isNodeRuntime;
+}
+
+function isOkStatus(status: number): status is TypedFetchSuccessStatuses {
+  return (
+    status === 200 ||
+    status === 201 ||
+    status === 202 ||
+    status === 203 ||
+    status === 204 ||
+    status === 205 ||
+    status === 206 ||
+    status === 207 ||
+    status === 208 ||
+    status === 226
+  );
+}
+
+export interface TypedFetchGeneratedResponses {}
+
+type KnownEndpointKey = keyof TypedFetchGeneratedResponses & string;
+type StatusLike = number | `${number}`;
+
+type ToNumericStatus<S extends StatusLike> = S extends number
+  ? S
+  : S extends `${infer N extends number}`
+  ? N
+  : number;
+
+type KnownEndpointResult<K extends KnownEndpointKey> = {
+  [S in keyof TypedFetchGeneratedResponses[K]]: {
+    endpoint: K;
+    status: ToNumericStatus<S & StatusLike>;
+    ok: ToNumericStatus<S & StatusLike> extends TypedFetchSuccessStatuses ? true : false;
+    data: TypedFetchGeneratedResponses[K][S];
+    response: Response;
+  };
+}[keyof TypedFetchGeneratedResponses[K]];
+
+export type TypedFetchResult<K extends string = string> = K extends KnownEndpointKey
+  ? KnownEndpointResult<K>
+  : {
+      endpoint: K;
+      status: number;
+      ok: boolean;
+      data: unknown;
+      response: Response;
+    };
+
+type TypedFetchOptions<K extends string> = {
+  endpointKey?: K;
+  config?: Partial<TypedFetchConfig>;
+};
+
+export async function typedFetch<K extends string = string>(
   input: RequestInfo | URL,
-  init?: TypedRequestInit
-): Promise<TypedResponse<ResponseType>> {
-  return fetchFunction(input, init) as Promise<TypedResponse<ResponseType>>;
+  init?: TypedFetchRequestInit,
+  options?: TypedFetchOptions<K>
+): Promise<TypedFetchResult<K>> {
+  const response = await fetchFunction(input, init);
+  const config = loadConfig(options?.config);
+  const method = init?.method ?? "GET";
+  const endpointKey =
+    options?.endpointKey ??
+    (normalizeEndpointKey({
+      input,
+      method,
+      dynamicSegmentPatterns: config.dynamicSegmentPatterns,
+    }) as K);
+
+  let data: unknown = undefined;
+  let shape: ShapeNode = { kind: "unknown" };
+  const contentType = response.headers.get("content-type");
+  const jsonCandidate = isJsonContentType(contentType);
+
+  if (jsonCandidate) {
+    try {
+      data = await response.clone().json();
+      shape = inferShape(data, config);
+    } catch {
+      data = undefined;
+      shape = { kind: "unknown" };
+    }
+  } else {
+    shape = { kind: "unknown" };
+  }
+
+  try {
+    const pathname = parsePathname(input);
+    if (shouldTrackEndpoint(pathname, config.include, config.exclude)) {
+      const observation: ObservationPayload = {
+        endpointKey,
+        status: response.status,
+        shape,
+        observedAt: new Date().toISOString(),
+        source: isNodeRuntime ? "node" : "browser",
+      };
+      const mode = config.observerMode;
+
+      if (mode === "none") {
+        // Explicitly disabled.
+      } else if (mode === "file" || (mode === "auto" && isNodeWritableRuntime())) {
+        const registry = loadRegistry(config.registryPath);
+        observeShape({
+          registry,
+          endpointKey: observation.endpointKey,
+          status: observation.status,
+          shape: observation.shape,
+        });
+        saveRegistry(config.registryPath, registry);
+      } else if (
+        mode === "localStorage" ||
+        (mode === "auto" && hasLocalStorage())
+      ) {
+        const registry = loadBrowserRegistry(config.browserStorageKey);
+        observeShape({
+          registry,
+          endpointKey: observation.endpointKey,
+          status: observation.status,
+          shape: observation.shape,
+        });
+        saveBrowserRegistry(config.browserStorageKey, registry);
+      }
+
+      if (config.syncUrl) {
+        void pushObservation({
+          syncUrl: config.syncUrl,
+          timeoutMs: config.syncTimeoutMs,
+          observation,
+        });
+      }
+    }
+  } catch {
+    // Observation failures must never block request handling.
+  }
+
+  const status = response.status;
+
+  return {
+    endpoint: endpointKey,
+    status,
+    ok: isOkStatus(status),
+    data,
+    response,
+  } as TypedFetchResult<K>;
 }
 
-export default tFetch;
+/**
+ * Compatibility export. Existing code importing `tFetch` now receives
+ * the typed status-aware helper result model.
+ */
+export function tFetch<K extends string = string>(
+  input: RequestInfo | URL,
+  init?: TypedFetchRequestInit,
+  options?: TypedFetchOptions<K>
+): Promise<TypedFetchResult<K>> {
+  return typedFetch(input, init, options);
+}
+
+export default typedFetch;

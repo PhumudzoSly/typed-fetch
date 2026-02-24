@@ -1,64 +1,100 @@
-# Next Typed Fetch
+# @phumu/typed-fetch
 
-A type-safe wrapper for the Fetch API that adds TypeScript support for better type safety in requests and responses.
+Privacy-first, status-aware typed fetch that learns response shapes and generates TypeScript types.
 
-# Big Thanks
-
-Thanks to [@Typed-Rocks](https://www.youtube.com/@Typed-Rocks) for providing the code used to create this package. Keep up the good work.
-
-## Installation
-
-You can install `next-typed-fetch` via npm:
+## Install
 
 ```bash
-npm install next-typed-fetch
+npm install @phumu/typed-fetch
 ```
 
-## Usage
-
-Here's how you can use the package in your app
+## Runtime Usage
 
 ```ts
-import tFetch from "next-typed-fetch";
+import { typedFetch } from "@phumu/typed-fetch";
 
-type Todo = { userId: string; title: string; completed: boolean };
+const result = await typedFetch("https://api.example.com/users/123?include=posts", {
+  method: "GET",
+});
 
-const apiUrl = "https://jsonplaceholder.typicode.com/todos/1";
-
-tFetch<Todo>(apiUrl, {
-  method: "GET", // You get predefined methods.
-  headers: {
-    "Content-Type": "application/json", // There are pre-defined headers
-    Accept: "application/json",
-  },
-})
-  .then((response) => response.json())
-  .then((data) => console.log(data))
-  .catch((error) => console.error("Error:", error));
+if (result.status === 200) {
+  console.log(result.data);
+}
 ```
 
-# API
+`typedFetch`:
+- auto-detects endpoint keys (`METHOD /path?queryKeys`)
+- captures response shape by HTTP status
+- stores only structural metadata (never payload values)
+- returns `{ endpoint, status, ok, data, response }`
 
-## tFetch
+Observation runtime behavior:
+- `observerMode: "auto"` (default): filesystem in Node, `localStorage` in browser if available
+- `observerMode: "file"`: force filesystem registry writes
+- `observerMode: "localStorage"`: force browser storage writes
+- `observerMode: "none"`: disable observation
+- `syncUrl`: optional listener endpoint to persist observations from both browser and server
 
-`tFetch<ResponseType = any>(input: RequestInfo | URL, init?: TypedRequestInit): Promise<TypedResponse<ResponseType>>`
+## Generate Types
 
-- input: The resource you want to fetch. This can be a URL or a Request object.
-- init: An object containing any custom settings that you want to apply to the request.
-- method: HTTP request method (e.g., GET, POST, PUT, DELETE).
-- headers: Headers to send with the request. Supports MIME types and an authorization token.
-- body: The request body. Only allowed for POST, PUT, DELETE, and UPDATE methods.
+```bash
+npm run build
+npm run generate
+```
 
-# Types
+This emits `generated/typed-fetch.d.ts` and augments:
 
-- TypedHeaders: Type-safe headers definition.
-- MimeTypes: Supported MIME types.
-- TypedResponse<T>: Response interface with typed json() method.
+```ts
+declare module "@phumu/typed-fetch" {
+  interface TypedFetchGeneratedResponses {
+    "GET /users/:param?include": {
+      200: { id: number; name: string };
+      404: { message: string };
+    };
+  }
+}
+```
 
-# Contributing
+## CLI
 
-Contributions are welcome! Please open an issue or submit a pull request on GitHub.
+```bash
+typed-fetch generate
+typed-fetch check
+typed-fetch clean
+typed-fetch listen
+typed-fetch clean --generated
+typed-fetch clean --registry
+```
 
-# License
+Sync listener endpoint:
+- `POST /sync` with observation payloads (used by `syncUrl`)
+- `GET /health` for health checks
+- default safety: localhost-only clients and local origins only
+- auto type generation on every sync event (debounced)
 
-MIT License
+## Config
+
+Use `typed-fetch.config.json` in your project root:
+
+```json
+{
+  "registryPath": ".typed-fetch/registry.json",
+  "generatedPath": "generated/typed-fetch.d.ts",
+  "include": ["/api/**"],
+  "exclude": ["/api/internal/**"],
+  "dynamicSegmentPatterns": ["numeric", "uuid", "hash"],
+  "maxDepth": 8,
+  "maxArraySample": 32,
+  "ignoreFieldNames": ["password", "token", "secret", "authorization"],
+  "strictPrivacyMode": true,
+  "observerMode": "auto",
+  "browserStorageKey": "__typed_fetch_registry__",
+  "syncUrl": "http://127.0.0.1:43111/sync",
+  "syncTimeoutMs": 1500
+}
+```
+
+Persistence workflow:
+1. Run `typed-fetch listen` during development.
+2. Use `typedFetch` in both server and client with `syncUrl` set.
+3. Commit `.typed-fetch/registry.json` and generated type files to keep types persistent across pushes.
