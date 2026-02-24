@@ -1,6 +1,6 @@
 # @phumudzo/typed-fetch
 
-Privacy-first, status-aware typed fetch that learns response shapes and generates TypeScript types.
+Status-aware `fetch` wrapper that learns response shapes and generates TypeScript types from real traffic.
 
 ## Install
 
@@ -8,91 +8,92 @@ Privacy-first, status-aware typed fetch that learns response shapes and generate
 npm install @phumudzo/typed-fetch
 ```
 
-## Runtime Usage
+## Real app workflow
+
+1. Use `typedFetch` in your app code.
+2. Pass a stable `endpointKey` per call.
+3. Run your app/tests to collect response shapes.
+4. Run `typed-fetch generate` to emit declaration types.
+5. Commit generated types so your team gets the same inference.
+
+## Example: API client in your app
 
 ```ts
 import { typedFetch } from "@phumudzo/typed-fetch";
 
-const result = await typedFetch(
-  "https://api.example.com/users/123?include=posts",
-  {
-    method: "GET",
-  },
-);
+export async function getTodo(todoId: number) {
+  const result = await typedFetch(
+    `https://jsonplaceholder.typicode.com/todos/${todoId}`,
+    { method: "GET" },
+    { endpointKey: "GET /todos/:param" },
+  );
 
-if (result.status === 200) {
-  console.log(result.data);
+  if (result.status === 200) {
+    return result.data;
+  }
+
+  throw new Error(`Request failed with status ${result.status}`);
 }
 ```
 
-`typedFetch`:
+## Generated typing behavior
 
-- auto-detects endpoint keys (`METHOD /path?queryKeys`)
-- captures response shape by HTTP status
-- stores only structural metadata (never payload values)
-- returns `{ endpoint, status, ok, data, response }`
-
-Observation runtime behavior:
-
-- `observerMode: "auto"` (default): filesystem in Node, `localStorage` in browser if available
-- `observerMode: "file"`: force filesystem registry writes
-- `observerMode: "localStorage"`: force browser storage writes
-- `observerMode: "none"`: disable observation
-- `syncUrl`: optional listener endpoint to persist observations from both browser and server
-
-## Generate Types
-
-```bash
-npm run build
-npm run generate
-```
-
-This emits `generated/typed-fetch.d.ts` and augments:
+After `typed-fetch generate`, your generated file augments:
 
 ```ts
 declare module "@phumudzo/typed-fetch" {
   interface TypedFetchGeneratedResponses {
-    "GET /users/:param?include": {
-      200: { id: number; name: string };
-      404: { message: string };
+    "GET /todos/:param": {
+      200: { id: number; title: string; completed: boolean; userId: number };
     };
   }
 }
 ```
 
-## CLI
+Then `result.data` is typed when you narrow by `status`.
+
+## Required contract
+
+`endpointKey` is required.  
+Without it, compile-time endpoint typing is not reliable.
+
+## Files created in your project
+
+- `.typed-fetch/registry.json`: captured shape metadata
+- `generated/typed-fetch.d.ts`: generated declaration types
+
+No raw response values are persisted, only structure.
+
+## Use in browser + server apps
+
+For mixed client/server traffic, run the listener in your dev environment:
 
 ```bash
-typed-fetch generate
-typed-fetch check
-typed-fetch clean
 typed-fetch listen
-typed-fetch clean --generated
-typed-fetch clean --registry
 ```
 
-Sync listener endpoint:
+Then set in `typed-fetch.config.json`:
 
-- `POST /sync` with observation payloads (used by `syncUrl`)
-- `GET /health` for health checks
-- default safety: localhost-only clients and local origins only
-- auto type generation on every sync event (debounced)
+```json
+{
+  "syncUrl": "http://127.0.0.1:43111/sync"
+}
+```
 
-## Config
+This lets browser and server observations merge into one registry and auto-generate types while listening.
 
-Use `typed-fetch.config.json` in your project root:
+## Config (`typed-fetch.config.json`)
 
 ```json
 {
   "registryPath": ".typed-fetch/registry.json",
   "generatedPath": "generated/typed-fetch.d.ts",
-  "include": ["/api/**"],
-  "exclude": ["/api/internal/**"],
+  "include": [],
+  "exclude": [],
   "dynamicSegmentPatterns": ["numeric", "uuid", "hash"],
   "maxDepth": 8,
   "maxArraySample": 32,
   "ignoreFieldNames": ["password", "token", "secret", "authorization"],
-  "strictPrivacyMode": true,
   "observerMode": "auto",
   "browserStorageKey": "__typed_fetch_registry__",
   "syncUrl": "http://127.0.0.1:43111/sync",
@@ -100,8 +101,11 @@ Use `typed-fetch.config.json` in your project root:
 }
 ```
 
-Persistence workflow:
+## CLI commands
 
-1. Run `typed-fetch listen` during development.
-2. Use `typedFetch` in both server and client with `syncUrl` set.
-3. Commit `.typed-fetch/registry.json` and generated type files to keep types persistent across pushes.
+```bash
+typed-fetch generate
+typed-fetch check
+typed-fetch clean
+typed-fetch listen
+```

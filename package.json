@@ -1,6 +1,6 @@
 {
   "name": "@phumudzo/typed-fetch",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Privacy-first status-aware typed fetch with type generation from response shapes",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
