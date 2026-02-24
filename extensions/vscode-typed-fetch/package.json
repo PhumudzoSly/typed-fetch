@@ -1,0 +1,64 @@
+{
+  "name": "typed-fetch-tools",
+  "displayName": "Typed Fetch Tools",
+  "description": "VS Code tools for @phumudzo/typed-fetch: generate types and control listener",
+  "version": "0.0.1",
+  "publisher": "phumudzo",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": ["Other"],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onCommand:typedFetch.generate",
+    "onCommand:typedFetch.listenerStart",
+    "onCommand:typedFetch.listenerStop",
+    "onCommand:typedFetch.runAndGenerate",
+    "onLanguage:typescript",
+    "onLanguage:javascript"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "typedFetch.generate",
+        "title": "Typed Fetch: Generate Types"
+      },
+      {
+        "command": "typedFetch.listenerStart",
+        "title": "Typed Fetch: Start Listener"
+      },
+      {
+        "command": "typedFetch.listenerStop",
+        "title": "Typed Fetch: Stop Listener"
+      },
+      {
+        "command": "typedFetch.runAndGenerate",
+        "title": "Typed Fetch: Run Current File + Generate"
+      }
+    ],
+    "configuration": {
+      "title": "Typed Fetch Tools",
+      "properties": {
+        "typedFetchTools.listenPort": {
+          "type": "number",
+          "default": 43111,
+          "description": "Port used when starting typed-fetch listener"
+        },
+        "typedFetchTools.allowNetwork": {
+          "type": "boolean",
+          "default": false,
+          "description": "Pass --allow-network when starting listener"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "watch": "tsc -w -p ."
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.14",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.8.2"
+  }
+}
