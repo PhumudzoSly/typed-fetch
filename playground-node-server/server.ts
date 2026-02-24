@@ -11,10 +11,10 @@ app.get("/health", (_req, res) => {
 const getData = async () => {
   try {
     const result = await typedFetch(
-      `https://jsonplaceholder.typicode.com/todos`,
+      `https://jsonplaceholder.typicode.com/posts`,
       { method: "GET" },
       {
-        endpointKey: "getTodos",
+        endpointKey: "getPosts",
       },
     );
 

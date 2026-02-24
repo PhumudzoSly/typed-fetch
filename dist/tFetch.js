@@ -62,15 +62,19 @@ function isOkStatus(status) {
 }
 function typedFetch(input, init, options) {
     return __awaiter(this, void 0, void 0, function* () {
-        var _a, _b;
+        var _a;
         const response = yield fetchFunction(input, init);
         const config = (0, config_1.loadConfig)(options === null || options === void 0 ? void 0 : options.config);
         const method = (_a = init === null || init === void 0 ? void 0 : init.method) !== null && _a !== void 0 ? _a : "GET";
-        const endpointKey = (_b = options === null || options === void 0 ? void 0 : options.endpointKey) !== null && _b !== void 0 ? _b : (0, normalize_1.normalizeEndpointKey)({
-            input,
-            method,
-            dynamicSegmentPatterns: config.dynamicSegmentPatterns,
-        });
+        const endpointKey = options.endpointKey;
+        if (!endpointKey || typeof endpointKey !== "string") {
+            const inferred = (0, normalize_1.normalizeEndpointKey)({
+                input,
+                method,
+                dynamicSegmentPatterns: config.dynamicSegmentPatterns,
+            });
+            throw new Error(`typedFetch requires an explicit endpointKey. Suggested key: "${inferred}"`);
+        }
         let data = undefined;
         let shape = { kind: "unknown" };
         const contentType = response.headers.get("content-type");
@@ -80,7 +84,7 @@ function typedFetch(input, init, options) {
                 data = yield response.clone().json();
                 shape = (0, shape_1.inferShape)(data, config);
             }
-            catch (_c) {
+            catch (_b) {
                 data = undefined;
                 shape = { kind: "unknown" };
             }
@@ -134,7 +138,7 @@ function typedFetch(input, init, options) {
                 }
             }
         }
-        catch (_d) {
+        catch (_c) {
             // Observation failures must never block request handling.
         }
         const status = response.status;

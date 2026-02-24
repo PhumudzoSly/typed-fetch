@@ -51,9 +51,11 @@ test("typedFetch captures status-aware shapes and strips ignored field names", a
 
   try {
     const ok = await typedFetch(`${baseUrl}/users/1`, undefined, {
+      endpointKey: "GET /users/:param",
       config: { registryPath, generatedPath },
     });
     const notFound = await typedFetch(`${baseUrl}/users/2`, undefined, {
+      endpointKey: "GET /users/:param",
       config: { registryPath, generatedPath },
     });
 
@@ -92,6 +94,7 @@ test("typedFetch pushes observations to sync listener", async () => {
 
   try {
     await typedFetch(`${baseUrl}/users/1`, undefined, {
+      endpointKey: "GET /users/:param",
       config: {
         observerMode: "none",
         syncUrl,

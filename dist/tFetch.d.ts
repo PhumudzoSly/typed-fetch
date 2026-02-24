@@ -21,13 +21,13 @@ export type TypedFetchResult<K extends string = string> = K extends KnownEndpoin
     response: Response;
 };
 type TypedFetchOptions<K extends string> = {
-    endpointKey?: K;
+    endpointKey: K;
     config?: Partial<TypedFetchConfig>;
 };
-export declare function typedFetch<K extends string = string>(input: RequestInfo | URL, init?: TypedFetchRequestInit, options?: TypedFetchOptions<K>): Promise<TypedFetchResult<K>>;
+export declare function typedFetch<K extends string = string>(input: RequestInfo | URL, init: TypedFetchRequestInit | undefined, options: TypedFetchOptions<K>): Promise<TypedFetchResult<K>>;
 /**
  * Compatibility export. Existing code importing `tFetch` now receives
  * the typed status-aware helper result model.
  */
-export declare function tFetch<K extends string = string>(input: RequestInfo | URL, init?: TypedFetchRequestInit, options?: TypedFetchOptions<K>): Promise<TypedFetchResult<K>>;
+export declare function tFetch<K extends string = string>(input: RequestInfo | URL, init: TypedFetchRequestInit | undefined, options: TypedFetchOptions<K>): Promise<TypedFetchResult<K>>;
 export default typedFetch;

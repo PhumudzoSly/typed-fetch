@@ -56,6 +56,7 @@ test("localStorage observer mode captures shapes without filesystem", async () =
   try {
     clearBrowserRegistry(storageKey);
     const result = await typedFetch(`${baseUrl}/browser/123`, undefined, {
+      endpointKey: "GET /browser/:param",
       config: {
         observerMode: "localStorage",
         browserStorageKey: storageKey,
@@ -77,4 +78,3 @@ test("localStorage observer mode captures shapes without filesystem", async () =
     }
   }
 });
-

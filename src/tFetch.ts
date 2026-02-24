@@ -100,25 +100,30 @@ export type TypedFetchResult<K extends string = string> = K extends KnownEndpoin
     };
 
 type TypedFetchOptions<K extends string> = {
-  endpointKey?: K;
+  endpointKey: K;
   config?: Partial<TypedFetchConfig>;
 };
 
 export async function typedFetch<K extends string = string>(
   input: RequestInfo | URL,
-  init?: TypedFetchRequestInit,
-  options?: TypedFetchOptions<K>
+  init: TypedFetchRequestInit | undefined,
+  options: TypedFetchOptions<K>
 ): Promise<TypedFetchResult<K>> {
   const response = await fetchFunction(input, init);
   const config = loadConfig(options?.config);
   const method = init?.method ?? "GET";
-  const endpointKey =
-    options?.endpointKey ??
-    (normalizeEndpointKey({
+  const endpointKey = options.endpointKey;
+
+  if (!endpointKey || typeof endpointKey !== "string") {
+    const inferred = normalizeEndpointKey({
       input,
       method,
       dynamicSegmentPatterns: config.dynamicSegmentPatterns,
-    }) as K);
+    });
+    throw new Error(
+      `typedFetch requires an explicit endpointKey. Suggested key: "${inferred}"`,
+    );
+  }
 
   let data: unknown = undefined;
   let shape: ShapeNode = { kind: "unknown" };
@@ -205,8 +210,8 @@ export async function typedFetch<K extends string = string>(
  */
 export function tFetch<K extends string = string>(
   input: RequestInfo | URL,
-  init?: TypedFetchRequestInit,
-  options?: TypedFetchOptions<K>
+  init: TypedFetchRequestInit | undefined,
+  options: TypedFetchOptions<K>
 ): Promise<TypedFetchResult<K>> {
   return typedFetch(input, init, options);
 }

@@ -9,6 +9,9 @@ declare module "@phumudzo/typed-fetch" {
     "GET /todos/:param": {
       200: Array<{ "completed": boolean; "id": number; "title": string; "userId": number; }> | { "completed": boolean; "id": number; "title": string; "userId": number; };
     };
+    "getPosts": {
+      200: Array<{ "body": string; "id": number; "title": string; "userId": number; }>;
+    };
     "getTodos": {
       200: Array<{ "completed": boolean; "id": number; "title": string; "userId": number; }>;
     };
