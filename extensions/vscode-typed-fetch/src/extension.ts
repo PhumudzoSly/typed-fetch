@@ -6,8 +6,17 @@ import * as path from "path";
 const execAsync = promisify(exec);
 let listenerProcess: ChildProcess | undefined;
 
+function getWorkspaceFolderForActiveFile(): vscode.WorkspaceFolder | undefined {
+  const activeEditor = vscode.window.activeTextEditor;
+  if (activeEditor) {
+    const folder = vscode.workspace.getWorkspaceFolder(activeEditor.document.uri);
+    if (folder) return folder;
+  }
+  return vscode.workspace.workspaceFolders?.[0];
+}
+
 function getWorkspaceRoot(): string | undefined {
-  return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  return getWorkspaceFolderForActiveFile()?.uri.fsPath;
 }
 
 function createOutput(): vscode.OutputChannel {
@@ -25,6 +34,11 @@ async function runCommand(
   if (stderr) output.appendLine(stderr.trimEnd());
 }
 
+function showFailure(message: string, output: vscode.OutputChannel): void {
+  output.show(true);
+  vscode.window.showErrorMessage(message);
+}
+
 async function generateTypes(output: vscode.OutputChannel): Promise<void> {
   const root = getWorkspaceRoot();
   if (!root) {
@@ -37,7 +51,7 @@ async function generateTypes(output: vscode.OutputChannel): Promise<void> {
     vscode.window.showInformationMessage("Typed Fetch: types generated.");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    vscode.window.showErrorMessage(`Typed Fetch generate failed: ${message}`);
+    showFailure(`Typed Fetch generate failed: ${message}`, output);
   }
 }
 
@@ -68,6 +82,10 @@ function startListener(output: vscode.OutputChannel): void {
 
   listenerProcess.stdout?.on("data", (d) => output.append(d.toString()));
   listenerProcess.stderr?.on("data", (d) => output.append(d.toString()));
+  listenerProcess.on("error", (error) => {
+    showFailure(`Typed Fetch listener failed to start: ${error.message}`, output);
+    listenerProcess = undefined;
+  });
   listenerProcess.on("exit", (code) => {
     output.appendLine(`listener exited with code ${code ?? 0}`);
     listenerProcess = undefined;
@@ -114,7 +132,7 @@ async function runCurrentFileAndGenerate(output: vscode.OutputChannel): Promise<
     await generateTypes(output);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    vscode.window.showErrorMessage(`Run+Generate failed: ${message}`);
+    showFailure(`Run+Generate failed: ${message}`, output);
   }
 }
 

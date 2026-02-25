@@ -1,0 +1,1 @@
+{"endpoints":{"getPosts":{"meta":{"lastSeenAt":"2026-02-25T08:14:30.227Z","observedPaths":["/posts"],"seenCount":2},"responses":{"200":{"items":{"fields":{"body":{"shape":{"kind":"string"}},"id":{"shape":{"kind":"number"}},"title":{"shape":{"kind":"string"}},"userId":{"shape":{"kind":"number"}}},"kind":"object"},"kind":"array"}}}},"version":1}

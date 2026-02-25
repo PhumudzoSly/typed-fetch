@@ -1,13 +1,43 @@
 {
   "name": "typed-fetch-tools",
   "displayName": "Typed Fetch Tools",
-  "description": "VS Code tools for @phumudzo/typed-fetch: generate types and control listener",
-  "version": "0.0.1",
+  "description": "Generate typed-fetch types, run listeners, and trigger manual generation directly from VS Code.",
+  "version": "0.2.0",
   "publisher": "phumudzo",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PhumudzoSly/next-typed-fetch.git",
+    "directory": "extensions/vscode-typed-fetch"
+  },
+  "homepage": "https://github.com/PhumudzoSly/next-typed-fetch/tree/main/extensions/vscode-typed-fetch",
+  "bugs": {
+    "url": "https://github.com/PhumudzoSly/next-typed-fetch/issues"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },
-  "categories": ["Other"],
+  "categories": ["Programming Languages", "Other"],
+  "keywords": [
+    "typed-fetch",
+    "typescript",
+    "api",
+    "codegen",
+    "dx"
+  ],
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#0B1B2B",
+    "theme": "dark"
+  },
+  "files": [
+    "dist/**",
+    "media/**",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "package.json"
+  ],
   "main": "./dist/extension.js",
   "activationEvents": [
     "onCommand:typedFetch.generate",
@@ -21,21 +51,85 @@
     "commands": [
       {
         "command": "typedFetch.generate",
-        "title": "Typed Fetch: Generate Types"
+        "title": "Typed Fetch: Generate Types",
+        "category": "Typed Fetch",
+        "icon": {
+          "light": "media/icons/generate-light.svg",
+          "dark": "media/icons/generate-dark.svg"
+        }
       },
       {
         "command": "typedFetch.listenerStart",
-        "title": "Typed Fetch: Start Listener"
+        "title": "Typed Fetch: Start Listener",
+        "category": "Typed Fetch",
+        "icon": {
+          "light": "media/icons/play-light.svg",
+          "dark": "media/icons/play-dark.svg"
+        }
       },
       {
         "command": "typedFetch.listenerStop",
-        "title": "Typed Fetch: Stop Listener"
+        "title": "Typed Fetch: Stop Listener",
+        "category": "Typed Fetch",
+        "icon": {
+          "light": "media/icons/stop-light.svg",
+          "dark": "media/icons/stop-dark.svg"
+        }
       },
       {
         "command": "typedFetch.runAndGenerate",
-        "title": "Typed Fetch: Run Current File + Generate"
+        "title": "Typed Fetch: Run Current File + Generate",
+        "category": "Typed Fetch",
+        "icon": {
+          "light": "media/icons/run-light.svg",
+          "dark": "media/icons/run-dark.svg"
+        }
       }
     ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "typedFetch.generate",
+          "when": "resourceLangId == typescript || resourceLangId == javascript",
+          "group": "navigation@50"
+        },
+        {
+          "command": "typedFetch.runAndGenerate",
+          "when": "resourceLangId == typescript || resourceLangId == javascript",
+          "group": "navigation@51"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "typedFetch.generate",
+          "when": "resourceLangId == typescript || resourceLangId == javascript",
+          "group": "navigation@50"
+        },
+        {
+          "command": "typedFetch.runAndGenerate",
+          "when": "resourceLangId == typescript || resourceLangId == javascript",
+          "group": "navigation@51"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "typedFetch.generate",
+          "when": "true"
+        },
+        {
+          "command": "typedFetch.listenerStart",
+          "when": "true"
+        },
+        {
+          "command": "typedFetch.listenerStop",
+          "when": "true"
+        },
+        {
+          "command": "typedFetch.runAndGenerate",
+          "when": "resourceLangId == typescript || resourceLangId == javascript"
+        }
+      ]
+    },
     "configuration": {
       "title": "Typed Fetch Tools",
       "properties": {
@@ -53,12 +147,18 @@
     }
   },
   "scripts": {
+    "clean": "rimraf dist && node -e \"const fs=require('fs'); for (const f of fs.readdirSync('.')) { if (/^typed-fetch-tools-.*\\\\.vsix$/.test(f)) fs.rmSync(f, { force: true }); }\"",
+    "prebuild": "pnpm run clean",
     "build": "tsc -p .",
-    "watch": "tsc -w -p ."
+    "watch": "tsc -w -p .",
+    "package": "pnpm dlx @vscode/vsce package",
+    "publish:precheck": "pnpm run build && pnpm run package",
+    "publish:marketplace": "pnpm dlx @vscode/vsce publish"
   },
   "devDependencies": {
     "@types/node": "^22.13.14",
     "@types/vscode": "^1.90.0",
+    "rimraf": "^6.0.1",
     "typescript": "^5.8.2"
   }
 }
