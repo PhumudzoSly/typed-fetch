@@ -37,10 +37,9 @@ test("persists merged status buckets without raw values", () => {
   const raw = fs.readFileSync(registryPath, "utf8");
   const parsed = JSON.parse(raw);
 
-  assert.equal(parsed.version, 1);
+  assert.equal(parsed.version, 2);
   assert.ok(parsed.endpoints["GET /users/:param"].responses["200"]);
   assert.ok(parsed.endpoints["GET /users/:param"].responses["404"]);
   assert.equal(raw.includes("alice@example.com"), false);
   assert.equal(raw.includes("missing-user"), false);
 });
-

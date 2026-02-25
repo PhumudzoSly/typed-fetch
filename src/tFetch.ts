@@ -1,8 +1,9 @@
+import { queueRegistryObservation } from "./core/file-observer";
 import { loadConfig } from "./core/config";
 import { hasLocalStorage, loadBrowserRegistry, saveBrowserRegistry } from "./core/browser-registry";
 import { shouldTrackEndpoint } from "./core/filter";
 import { normalizeEndpointKey } from "./core/normalize";
-import { loadRegistry, observeShape, saveRegistry } from "./core/registry";
+import { observeShape } from "./core/registry";
 import { inferShape } from "./core/shape";
 import { pushObservation } from "./core/sync";
 import type {
@@ -24,13 +25,6 @@ const fetchFunction: FetchFunction = (() => {
   if (typeof fetch === "function") {
     return fetch.bind(globalThis) as FetchFunction;
   }
-
-  if (isNodeRuntime) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const nodeFetch = require("node-fetch") as FetchFunction;
-    return nodeFetch;
-  }
-
   throw new Error("No fetch implementation available in this runtime.");
 })();
 
@@ -102,6 +96,7 @@ export type TypedFetchResult<K extends string = string> = K extends KnownEndpoin
 type TypedFetchOptions<K extends string> = {
   endpointKey: K;
   config?: Partial<TypedFetchConfig>;
+  configPath?: string;
 };
 
 export async function typedFetch<K extends string = string>(
@@ -110,7 +105,7 @@ export async function typedFetch<K extends string = string>(
   options: TypedFetchOptions<K>
 ): Promise<TypedFetchResult<K>> {
   const response = await fetchFunction(input, init);
-  const config = loadConfig(options?.config);
+  const config = loadConfig(options?.config, { configPath: options?.configPath });
   const method = init?.method ?? "GET";
   const endpointKey = options.endpointKey;
 
@@ -157,15 +152,16 @@ export async function typedFetch<K extends string = string>(
       if (mode === "none") {
         // Explicitly disabled.
       } else if (mode === "file" || (mode === "auto" && isNodeWritableRuntime())) {
-        const registry = loadRegistry(config.registryPath);
-        observeShape({
-          registry,
-          endpointKey: observation.endpointKey,
-          status: observation.status,
-          shape: observation.shape,
-          rawPath: pathname,
+        queueRegistryObservation({
+          registryPath: config.registryPath,
+          observation: {
+            endpointKey: observation.endpointKey,
+            status: observation.status,
+            shape: observation.shape,
+            observedAt: new Date(observation.observedAt),
+            rawPath: config.strictPrivacyMode ? undefined : pathname,
+          },
         });
-        saveRegistry(config.registryPath, registry);
       } else if (
         mode === "localStorage" ||
         (mode === "auto" && hasLocalStorage())
@@ -176,7 +172,7 @@ export async function typedFetch<K extends string = string>(
           endpointKey: observation.endpointKey,
           status: observation.status,
           shape: observation.shape,
-          rawPath: pathname,
+          rawPath: config.strictPrivacyMode ? undefined : pathname,
         });
         saveBrowserRegistry(config.browserStorageKey, registry);
       }

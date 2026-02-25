@@ -64,6 +64,9 @@ test("typedFetch captures status-aware shapes and strips ignored field names", a
     assert.equal(notFound.status, 404);
     assert.equal(notFound.ok, false);
 
+    // File observer mode batches writes briefly before flushing.
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
     const registry = loadRegistry(registryPath);
     const bucket = registry.endpoints["GET /users/:param"];
     assert.ok(bucket);

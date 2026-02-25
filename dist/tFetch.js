@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.typedFetch = typedFetch;
 exports.tFetch = tFetch;
+const file_observer_1 = require("./core/file-observer");
 const config_1 = require("./core/config");
 const browser_registry_1 = require("./core/browser-registry");
 const filter_1 = require("./core/filter");
@@ -24,11 +25,6 @@ const isNodeRuntime = typeof process !== "undefined" &&
 const fetchFunction = (() => {
     if (typeof fetch === "function") {
         return fetch.bind(globalThis);
-    }
-    if (isNodeRuntime) {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const nodeFetch = require("node-fetch");
-        return nodeFetch;
     }
     throw new Error("No fetch implementation available in this runtime.");
 })();
@@ -64,7 +60,7 @@ function typedFetch(input, init, options) {
     return __awaiter(this, void 0, void 0, function* () {
         var _a;
         const response = yield fetchFunction(input, init);
-        const config = (0, config_1.loadConfig)(options === null || options === void 0 ? void 0 : options.config);
+        const config = (0, config_1.loadConfig)(options === null || options === void 0 ? void 0 : options.config, { configPath: options === null || options === void 0 ? void 0 : options.configPath });
         const method = (_a = init === null || init === void 0 ? void 0 : init.method) !== null && _a !== void 0 ? _a : "GET";
         const endpointKey = options.endpointKey;
         if (!endpointKey || typeof endpointKey !== "string") {
@@ -107,15 +103,16 @@ function typedFetch(input, init, options) {
                     // Explicitly disabled.
                 }
                 else if (mode === "file" || (mode === "auto" && isNodeWritableRuntime())) {
-                    const registry = (0, registry_1.loadRegistry)(config.registryPath);
-                    (0, registry_1.observeShape)({
-                        registry,
-                        endpointKey: observation.endpointKey,
-                        status: observation.status,
-                        shape: observation.shape,
-                        rawPath: pathname,
+                    (0, file_observer_1.queueRegistryObservation)({
+                        registryPath: config.registryPath,
+                        observation: {
+                            endpointKey: observation.endpointKey,
+                            status: observation.status,
+                            shape: observation.shape,
+                            observedAt: new Date(observation.observedAt),
+                            rawPath: config.strictPrivacyMode ? undefined : pathname,
+                        },
                     });
-                    (0, registry_1.saveRegistry)(config.registryPath, registry);
                 }
                 else if (mode === "localStorage" ||
                     (mode === "auto" && (0, browser_registry_1.hasLocalStorage)())) {
@@ -125,7 +122,7 @@ function typedFetch(input, init, options) {
                         endpointKey: observation.endpointKey,
                         status: observation.status,
                         shape: observation.shape,
-                        rawPath: pathname,
+                        rawPath: config.strictPrivacyMode ? undefined : pathname,
                     });
                     (0, browser_registry_1.saveBrowserRegistry)(config.browserStorageKey, registry);
                 }

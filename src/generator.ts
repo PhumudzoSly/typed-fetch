@@ -58,12 +58,13 @@ function renderEndpointResponses(registry: Registry): string {
 
 export function generateTypes(
   configOverrides: Partial<TypedFetchConfig> = {},
+  options: { configPath?: string } = {}
 ): {
   outputPath: string;
   content: string;
   warnings: string[];
 } {
-  const config = loadConfig(configOverrides);
+  const config = loadConfig(configOverrides, options);
   const registry = loadRegistry(config.registryPath);
 
   const endpoints = renderEndpointResponses(registry);
@@ -93,11 +94,14 @@ export {};
   return { outputPath: config.generatedPath, content, warnings };
 }
 
-export function checkTypes(configOverrides: Partial<TypedFetchConfig> = {}): {
+export function checkTypes(
+  configOverrides: Partial<TypedFetchConfig> = {},
+  options: { configPath?: string } = {}
+): {
   ok: boolean;
   outputPath: string;
 } {
-  const config = loadConfig(configOverrides);
+  const config = loadConfig(configOverrides, options);
   const registry = loadRegistry(config.registryPath);
   const endpoints = renderEndpointResponses(registry);
   const expected = `/* eslint-disable */
@@ -120,9 +124,10 @@ export {};
 
 export function cleanArtifacts(
   configOverrides: Partial<TypedFetchConfig> = {},
+  options: { configPath?: string } = {},
   args: { generated?: boolean; registry?: boolean } = {},
 ): void {
-  const config = loadConfig(configOverrides);
+  const config = loadConfig(configOverrides, options);
   const removeGenerated = args.generated || (!args.generated && !args.registry);
   const removeRegistry = args.registry || (!args.generated && !args.registry);
 

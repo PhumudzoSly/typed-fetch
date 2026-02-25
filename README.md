@@ -8,6 +8,8 @@ Status-aware `fetch` wrapper that learns response shapes and generates TypeScrip
 npm install @phumudzo/typed-fetch
 ```
 
+Node.js `18+` is required.
+
 ## VS Code extension
 
 Use **Typed Fetch Tools** in VS Code for in-editor workflows:
@@ -74,6 +76,7 @@ Without it, compile-time endpoint typing is not reliable.
 - `generated/typed-fetch.d.ts`: generated declaration types
 
 No raw response values are persisted, only structure.
+When `strictPrivacyMode` is enabled (default), raw observed request paths are not stored.
 
 ## Use in browser + server apps
 
@@ -105,6 +108,7 @@ This lets browser and server observations merge into one registry and auto-gener
   "maxDepth": 8,
   "maxArraySample": 32,
   "ignoreFieldNames": ["password", "token", "secret", "authorization"],
+  "strictPrivacyMode": true,
   "observerMode": "auto",
   "browserStorageKey": "__typed_fetch_registry__",
   "syncUrl": "http://127.0.0.1:43111/sync",
@@ -115,8 +119,11 @@ This lets browser and server observations merge into one registry and auto-gener
 ## CLI commands
 
 ```bash
+typed-fetch init
 typed-fetch generate
 typed-fetch check
 typed-fetch clean
 typed-fetch listen
 ```
+
+All commands accept `--config <path>` for monorepos or custom config locations.

@@ -23,6 +23,7 @@ export type TypedFetchResult<K extends string = string> = K extends KnownEndpoin
 type TypedFetchOptions<K extends string> = {
     endpointKey: K;
     config?: Partial<TypedFetchConfig>;
+    configPath?: string;
 };
 export declare function typedFetch<K extends string = string>(input: RequestInfo | URL, init: TypedFetchRequestInit | undefined, options: TypedFetchOptions<K>): Promise<TypedFetchResult<K>>;
 /**

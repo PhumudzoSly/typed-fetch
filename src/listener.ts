@@ -3,10 +3,8 @@ import { loadConfig } from "./core/config";
 import { generateTypes } from "./generator";
 import {
   coerceRegistry,
-  loadRegistry,
-  mergeRegistryInto,
-  observeShape,
-  saveRegistry,
+  mergeRegistryIntoPath,
+  observeShapeToRegistryPath,
 } from "./core/registry";
 import type { ObservationPayload, RegistrySyncPayload, TypedFetchConfig } from "./core/types";
 
@@ -14,6 +12,7 @@ type ListenerOptions = {
   port?: number;
   host?: string;
   config?: Partial<TypedFetchConfig>;
+  configPath?: string;
   generateOnSync?: boolean;
   generateDebounceMs?: number;
   allowNetwork?: boolean;
@@ -71,22 +70,18 @@ function readBody(req: http.IncomingMessage): Promise<string> {
 }
 
 function applyObservation(registryPath: string, observation: ObservationPayload): void {
-  const registry = loadRegistry(registryPath);
-  observeShape({
-    registry,
+  observeShapeToRegistryPath({
+    registryPath,
     endpointKey: observation.endpointKey,
     status: observation.status,
     shape: observation.shape,
     observedAt: new Date(observation.observedAt),
     rawPath: undefined,
   });
-  saveRegistry(registryPath, registry);
 }
 
 function applyRegistry(registryPath: string, incomingRegistry: unknown): void {
-  const registry = loadRegistry(registryPath);
-  mergeRegistryInto(registry, coerceRegistry(incomingRegistry));
-  saveRegistry(registryPath, registry);
+  mergeRegistryIntoPath(registryPath, coerceRegistry(incomingRegistry));
 }
 
 export async function startListener(options: ListenerOptions = {}): Promise<{
@@ -94,7 +89,7 @@ export async function startListener(options: ListenerOptions = {}): Promise<{
   port: number;
   stop: () => Promise<void>;
 }> {
-  const config = loadConfig(options.config);
+  const config = loadConfig(options.config, { configPath: options.configPath });
   const port = options.port ?? 43111;
   const host = options.host ?? "127.0.0.1";
   const generateOnSync = options.generateOnSync ?? true;
@@ -112,7 +107,7 @@ export async function startListener(options: ListenerOptions = {}): Promise<{
     generateTimer = setTimeout(() => {
       generateTimer = null;
       try {
-        generateTypes(config);
+        generateTypes(config, { configPath: options.configPath });
       } catch {
         // Ignore generate failures in listener hot path.
       }
