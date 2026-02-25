@@ -8,6 +8,17 @@ Status-aware `fetch` wrapper that learns response shapes and generates TypeScrip
 npm install @phumudzo/typed-fetch
 ```
 
+## VS Code extension
+
+Use **Typed Fetch Tools** in VS Code for in-editor workflows:
+
+- Generate types manually from the Command Palette
+- Start/stop listener without leaving your editor
+- Run current JS/TS file and regenerate types in one step
+- Use inline CodeLens and hover actions on `typedFetch`/`tFetch`
+
+Marketplace: https://marketplace.visualstudio.com/items?itemName=phumudzo.typed-fetch-tools
+
 ## Real app workflow
 
 1. Use `typedFetch` in your app code.
