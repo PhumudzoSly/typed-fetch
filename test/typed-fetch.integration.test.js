@@ -124,6 +124,29 @@ test("typedFetch auto-stringifies plain JSON body values", async () => {
 
 
 
+
+
+test("typedFetch JSON-stringifies string body values", async () => {
+  const { server, port, getLatestPostedTodo } = await startServer();
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  try {
+    const result = await typedFetch(
+      `${baseUrl}/todos`,
+      {
+        method: "POST",
+        body: "plain-string",
+      },
+      { endpointKey: "POST /todos" },
+    );
+
+    assert.equal(result.status, 201);
+    assert.equal(getLatestPostedTodo(), "plain-string");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 test("typedJsonBody sets content-type and serializes payload", async () => {
   const { server, port, getLatestPostedTodo } = await startServer();
   const baseUrl = `http://127.0.0.1:${port}`;

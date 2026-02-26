@@ -123,9 +123,6 @@ export type TypedFetchInit<K extends string = string> = Omit<TypedFetchRequestIn
 };
 
 function isBodyInitLike(value: unknown): value is BodyInit {
-  if (typeof value === "string") {
-    return true;
-  }
   if (typeof URLSearchParams !== "undefined" && value instanceof URLSearchParams) {
     return true;
   }
@@ -177,7 +174,9 @@ export function typedJsonBody<T extends JsonBodyValue>(
     headers.set("content-type", "application/json");
   }
   return {
-    body: JSON.stringify(value),
+    body: new Blob([JSON.stringify(value)], {
+      type: headers.get("content-type") ?? "application/json",
+    }),
     headers,
   };
 }

@@ -58,9 +58,6 @@ function isOkStatus(status) {
         status === 226);
 }
 function isBodyInitLike(value) {
-    if (typeof value === "string") {
-        return true;
-    }
     if (typeof URLSearchParams !== "undefined" && value instanceof URLSearchParams) {
         return true;
     }
@@ -96,13 +93,15 @@ function prepareRequestInit(init) {
     return Object.assign(Object.assign({}, init), { headers, body: JSON.stringify(init.body) });
 }
 function typedJsonBody(value, options = {}) {
-    var _a;
+    var _a, _b;
     const headers = new Headers((_a = options.headers) !== null && _a !== void 0 ? _a : undefined);
     if (!headers.has("content-type")) {
         headers.set("content-type", "application/json");
     }
     return {
-        body: JSON.stringify(value),
+        body: new Blob([JSON.stringify(value)], {
+            type: (_b = headers.get("content-type")) !== null && _b !== void 0 ? _b : "application/json",
+        }),
         headers,
     };
 }
