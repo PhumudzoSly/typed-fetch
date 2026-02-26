@@ -9,6 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.typedJsonBody = typedJsonBody;
 exports.typedFetch = typedFetch;
 exports.tFetch = tFetch;
 const file_observer_1 = require("./core/file-observer");
@@ -56,12 +57,61 @@ function isOkStatus(status) {
         status === 208 ||
         status === 226);
 }
+function isBodyInitLike(value) {
+    if (typeof URLSearchParams !== "undefined" && value instanceof URLSearchParams) {
+        return true;
+    }
+    if (typeof FormData !== "undefined" && value instanceof FormData) {
+        return true;
+    }
+    if (typeof Blob !== "undefined" && value instanceof Blob) {
+        return true;
+    }
+    if (typeof ArrayBuffer !== "undefined" && value instanceof ArrayBuffer) {
+        return true;
+    }
+    if (ArrayBuffer.isView(value)) {
+        return true;
+    }
+    if (typeof ReadableStream !== "undefined" && value instanceof ReadableStream) {
+        return true;
+    }
+    return false;
+}
+function prepareRequestInit(init) {
+    var _a;
+    if (!init || init.body === undefined || init.body === null) {
+        return init;
+    }
+    if (isBodyInitLike(init.body)) {
+        return init;
+    }
+    const headers = new Headers((_a = init.headers) !== null && _a !== void 0 ? _a : undefined);
+    if (!headers.has("content-type")) {
+        headers.set("content-type", "application/json");
+    }
+    return Object.assign(Object.assign({}, init), { headers, body: JSON.stringify(init.body) });
+}
+function typedJsonBody(value, options = {}) {
+    var _a, _b;
+    const headers = new Headers((_a = options.headers) !== null && _a !== void 0 ? _a : undefined);
+    if (!headers.has("content-type")) {
+        headers.set("content-type", "application/json");
+    }
+    return {
+        body: new Blob([JSON.stringify(value)], {
+            type: (_b = headers.get("content-type")) !== null && _b !== void 0 ? _b : "application/json",
+        }),
+        headers,
+    };
+}
 function typedFetch(input, init, options) {
     return __awaiter(this, void 0, void 0, function* () {
         var _a;
-        const response = yield fetchFunction(input, init);
+        const preparedInit = prepareRequestInit(init);
+        const response = yield fetchFunction(input, preparedInit);
         const config = (0, config_1.loadConfig)(options === null || options === void 0 ? void 0 : options.config, { configPath: options === null || options === void 0 ? void 0 : options.configPath });
-        const method = (_a = init === null || init === void 0 ? void 0 : init.method) !== null && _a !== void 0 ? _a : "GET";
+        const method = (_a = preparedInit === null || preparedInit === void 0 ? void 0 : preparedInit.method) !== null && _a !== void 0 ? _a : "GET";
         const endpointKey = options.endpointKey;
         if (!endpointKey || typeof endpointKey !== "string") {
             const inferred = (0, normalize_1.normalizeEndpointKey)({
@@ -148,10 +198,6 @@ function typedFetch(input, init, options) {
         };
     });
 }
-/**
- * Compatibility export. Existing code importing `tFetch` now receives
- * the typed status-aware helper result model.
- */
 function tFetch(input, init, options) {
     return typedFetch(input, init, options);
 }

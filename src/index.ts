@@ -1,5 +1,12 @@
-export { default, tFetch, typedFetch } from "./tFetch";
-export type { TypedFetchResult, TypedFetchGeneratedResponses } from "./tFetch";
+export { default, tFetch, typedFetch, typedJsonBody } from "./tFetch";
+export type {
+  TypedFetchResult,
+  TypedFetchGeneratedResponses,
+  TypedFetchGeneratedRequests,
+  TypedFetchBody,
+  TypedFetchInit,
+  JsonBodyValue,
+} from "./tFetch";
 export { generateTypes, checkTypes, cleanArtifacts } from "./generator";
 export { startListener } from "./listener";
 export {
