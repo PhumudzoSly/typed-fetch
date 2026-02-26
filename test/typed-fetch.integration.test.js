@@ -168,7 +168,6 @@ test("typedJsonBody sets content-type and serializes payload", async () => {
   }
 });
 
-
 test("typedFetch pushes observations to sync listener", async () => {
   const { server, port } = await startServer();
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "typed-fetch-sync-"));
