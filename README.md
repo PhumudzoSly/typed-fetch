@@ -65,6 +65,61 @@ declare module "@phumudzo/typed-fetch" {
 
 Then `result.data` is typed when you narrow by `status`.
 
+## Manual request body typing
+
+Response types are generated from observed traffic, while request body types are defined manually by you.
+
+Create a declaration file (for example `types/typed-fetch.requests.d.ts`):
+
+```ts
+declare module "@phumudzo/typed-fetch" {
+  interface TypedFetchGeneratedRequests {
+    "POST /todos": { title: string; completed?: boolean };
+    "PATCH /todos/:param": { title?: string; completed?: boolean };
+  }
+}
+```
+
+Now `typedFetch` validates body shape from the `endpointKey`:
+
+```ts
+await typedFetch(
+  "https://api.example.com/todos",
+  {
+    method: "POST",
+    body: { title: "Ship typed requests", completed: false },
+  },
+  { endpointKey: "POST /todos" },
+);
+
+// TypeScript error (title must be string)
+await typedFetch(
+  "https://api.example.com/todos",
+  {
+    method: "POST",
+    body: { title: 123 },
+  },
+  { endpointKey: "POST /todos" },
+);
+```
+
+When `body` is a plain object/array/primitive, `typedFetch` will JSON-stringify it and set `content-type: application/json` if missing.
+
+You can also build JSON body payloads explicitly:
+
+```ts
+import { typedFetch, typedJsonBody } from "@phumudzo/typed-fetch";
+
+await typedFetch(
+  "https://api.example.com/todos",
+  {
+    method: "POST",
+    ...typedJsonBody({ title: "Use helper" }),
+  },
+  { endpointKey: "POST /todos" },
+);
+```
+
 ## Required contract
 
 `endpointKey` is required.  

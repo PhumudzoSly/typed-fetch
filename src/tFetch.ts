@@ -16,6 +16,12 @@ import type {
 
 type FetchFunction = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
+type JsonBodyPrimitive = string | number | boolean | null;
+export type JsonBodyValue =
+  | JsonBodyPrimitive
+  | JsonBodyValue[]
+  | { [key: string]: JsonBodyValue | undefined };
+
 const isNodeRuntime =
   typeof process !== "undefined" &&
   Boolean(process.versions) &&
@@ -64,7 +70,16 @@ function isOkStatus(status: number): status is TypedFetchSuccessStatuses {
 
 export interface TypedFetchGeneratedResponses {}
 
+/**
+ * Manual request-body map keyed by endpointKey.
+ *
+ * Users can augment this interface in their own declaration files to enforce
+ * request body types per endpoint.
+ */
+export interface TypedFetchGeneratedRequests {}
+
 type KnownEndpointKey = keyof TypedFetchGeneratedResponses & string;
+type KnownRequestEndpointKey = keyof TypedFetchGeneratedRequests & string;
 type StatusLike = number | `${number}`;
 
 type ToNumericStatus<S extends StatusLike> = S extends number
@@ -99,14 +114,95 @@ type TypedFetchOptions<K extends string> = {
   configPath?: string;
 };
 
+export type TypedFetchBody<K extends string> = K extends KnownRequestEndpointKey
+  ? TypedFetchGeneratedRequests[K]
+  : never;
+
+export type TypedFetchInit<K extends string = string> = Omit<TypedFetchRequestInit, "body"> & {
+  body?: BodyInit | TypedFetchBody<K> | null;
+};
+
+function isBodyInitLike(value: unknown): value is BodyInit {
+  if (typeof value === "string") {
+    return true;
+  }
+  if (typeof URLSearchParams !== "undefined" && value instanceof URLSearchParams) {
+    return true;
+  }
+  if (typeof FormData !== "undefined" && value instanceof FormData) {
+    return true;
+  }
+  if (typeof Blob !== "undefined" && value instanceof Blob) {
+    return true;
+  }
+  if (typeof ArrayBuffer !== "undefined" && value instanceof ArrayBuffer) {
+    return true;
+  }
+  if (ArrayBuffer.isView(value)) {
+    return true;
+  }
+  if (typeof ReadableStream !== "undefined" && value instanceof ReadableStream) {
+    return true;
+  }
+  return false;
+}
+
+function prepareRequestInit<K extends string>(init: TypedFetchInit<K> | undefined): RequestInit | undefined {
+  if (!init || init.body === undefined || init.body === null) {
+    return init;
+  }
+
+  if (isBodyInitLike(init.body)) {
+    return init;
+  }
+
+  const headers = new Headers(init.headers ?? undefined);
+  if (!headers.has("content-type")) {
+    headers.set("content-type", "application/json");
+  }
+
+  return {
+    ...init,
+    headers,
+    body: JSON.stringify(init.body),
+  };
+}
+
+export function typedJsonBody<T extends JsonBodyValue>(
+  value: T,
+  options: { headers?: HeadersInit } = {}
+): Pick<RequestInit, "body" | "headers"> {
+  const headers = new Headers(options.headers ?? undefined);
+  if (!headers.has("content-type")) {
+    headers.set("content-type", "application/json");
+  }
+  return {
+    body: JSON.stringify(value),
+    headers,
+  };
+}
+
+export async function typedFetch<K extends KnownRequestEndpointKey>(
+  input: RequestInfo | URL,
+  init: TypedFetchInit<K> | undefined,
+  options: TypedFetchOptions<K>
+): Promise<TypedFetchResult<K>>;
+
 export async function typedFetch<K extends string = string>(
   input: RequestInfo | URL,
   init: TypedFetchRequestInit | undefined,
   options: TypedFetchOptions<K>
+): Promise<TypedFetchResult<K>>;
+
+export async function typedFetch<K extends string = string>(
+  input: RequestInfo | URL,
+  init: TypedFetchInit<K> | undefined,
+  options: TypedFetchOptions<K>
 ): Promise<TypedFetchResult<K>> {
-  const response = await fetchFunction(input, init);
+  const preparedInit = prepareRequestInit(init);
+  const response = await fetchFunction(input, preparedInit);
   const config = loadConfig(options?.config, { configPath: options?.configPath });
-  const method = init?.method ?? "GET";
+  const method = preparedInit?.method ?? "GET";
   const endpointKey = options.endpointKey;
 
   if (!endpointKey || typeof endpointKey !== "string") {
@@ -204,9 +300,21 @@ export async function typedFetch<K extends string = string>(
  * Compatibility export. Existing code importing `tFetch` now receives
  * the typed status-aware helper result model.
  */
+export function tFetch<K extends KnownRequestEndpointKey>(
+  input: RequestInfo | URL,
+  init: TypedFetchInit<K> | undefined,
+  options: TypedFetchOptions<K>
+): Promise<TypedFetchResult<K>>;
+
 export function tFetch<K extends string = string>(
   input: RequestInfo | URL,
   init: TypedFetchRequestInit | undefined,
+  options: TypedFetchOptions<K>
+): Promise<TypedFetchResult<K>>;
+
+export function tFetch<K extends string = string>(
+  input: RequestInfo | URL,
+  init: TypedFetchInit<K> | undefined,
   options: TypedFetchOptions<K>
 ): Promise<TypedFetchResult<K>> {
   return typedFetch(input, init, options);

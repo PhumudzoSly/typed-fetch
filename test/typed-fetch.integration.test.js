@@ -5,11 +5,12 @@ const os = require("node:os");
 const path = require("node:path");
 const http = require("node:http");
 
-const { typedFetch } = require("../dist/tFetch");
+const { typedFetch, typedJsonBody } = require("../dist/tFetch");
 const { loadRegistry } = require("../dist/core/registry");
 const { startListener } = require("../dist/listener");
 
 function startServer() {
+  let latestPostedTodo = null;
   const server = http.createServer((req, res) => {
     if (req.url === "/users/1" && req.method === "GET") {
       res.statusCode = 200;
@@ -25,6 +26,20 @@ function startServer() {
       return;
     }
 
+    if (req.url === "/todos" && req.method === "POST") {
+      let raw = "";
+      req.on("data", (chunk) => {
+        raw += String(chunk);
+      });
+      req.on("end", () => {
+        latestPostedTodo = JSON.parse(raw);
+        res.statusCode = 201;
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ ok: true }));
+      });
+      return;
+    }
+
     res.statusCode = 500;
     res.setHeader("content-type", "application/json");
     res.end(JSON.stringify({ error: "Unhandled" }));
@@ -37,7 +52,11 @@ function startServer() {
         reject(new Error("Failed to bind test server"));
         return;
       }
-      resolve({ server, port: address.port });
+      resolve({
+        server,
+        port: address.port,
+        getLatestPostedTodo: () => latestPostedTodo,
+      });
     });
   });
 }
@@ -81,6 +100,51 @@ test("typedFetch captures status-aware shapes and strips ignored field names", a
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+test("typedFetch auto-stringifies plain JSON body values", async () => {
+  const { server, port, getLatestPostedTodo } = await startServer();
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  try {
+    const result = await typedFetch(
+      `${baseUrl}/todos`,
+      {
+        method: "POST",
+        body: { title: "Write tests", done: false },
+      },
+      { endpointKey: "POST /todos" },
+    );
+
+    assert.equal(result.status, 201);
+    assert.deepEqual(getLatestPostedTodo(), { title: "Write tests", done: false });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+
+
+test("typedJsonBody sets content-type and serializes payload", async () => {
+  const { server, port, getLatestPostedTodo } = await startServer();
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  try {
+    const result = await typedFetch(
+      `${baseUrl}/todos`,
+      {
+        method: "POST",
+        ...typedJsonBody({ title: "Use helper" }),
+      },
+      { endpointKey: "POST /todos" },
+    );
+
+    assert.equal(result.status, 201);
+    assert.deepEqual(getLatestPostedTodo(), { title: "Use helper" });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 
 test("typedFetch pushes observations to sync listener", async () => {
   const { server, port } = await startServer();
