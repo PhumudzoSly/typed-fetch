@@ -122,10 +122,6 @@ test("typedFetch auto-stringifies plain JSON body values", async () => {
   }
 });
 
-
-
-
-
 test("typedFetch JSON-stringifies string body values", async () => {
   const { server, port, getLatestPostedTodo } = await startServer();
   const baseUrl = `http://127.0.0.1:${port}`;
@@ -167,7 +163,6 @@ test("typedJsonBody sets content-type and serializes payload", async () => {
     await new Promise((resolve) => server.close(resolve));
   }
 });
-
 
 test("typedFetch pushes observations to sync listener", async () => {
   const { server, port } = await startServer();
