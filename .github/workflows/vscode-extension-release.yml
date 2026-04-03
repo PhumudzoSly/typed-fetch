@@ -29,10 +29,10 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
+          cache-dependency-path: extensions/vscode-typed-fetch/pnpm-lock.yaml
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --lockfile-dir ../..
+        run: pnpm install --frozen-lockfile
 
       - name: Build extension
         run: pnpm run build

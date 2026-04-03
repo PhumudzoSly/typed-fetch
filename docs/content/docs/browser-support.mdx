@@ -1,0 +1,239 @@
+---
+title: Browser Support
+description: Using typed-fetch in browser and mixed client/server applications
+---
+
+# Browser Support
+
+typed-fetch works seamlessly in modern browsers and supports mixed client/server architectures.
+
+## Browser Requirements
+
+- Modern browser with native `fetch` support
+- Works in all modern browsers (Chrome, Firefox, Safari, Edge)
+- Node.js 18+ for server-side usage
+
+## Basic Browser Usage
+
+```ts
+import { typedFetch } from '@phumudzo/typed-fetch';
+
+// Fetch from browser
+const result = await typedFetch(
+  'https://api.example.com/user/123',
+  { method: 'GET' },
+  { endpointKey: 'GET /user/:id' }
+);
+
+if (result.status === 200) {
+  console.log(result.data);
+}
+```
+
+## Browser Storage
+
+By default, browser observations are stored in `localStorage`:
+
+```ts
+// Stored at: localStorage['__typed_fetch_registry__']
+```
+
+**Configuration**:
+
+```json
+{
+  "browserStorageKey": "__typed_fetch_registry__"
+}
+```
+
+## Mixed Client/Server Applications
+
+For applications with both browser and server API calls, use the listener to unify observations:
+
+### Step 1: Start the listener
+
+```bash
+npx typed-fetch listen
+```
+
+This starts a sync server at `http://127.0.0.1:43111`.
+
+### Step 2: Configure sync URL
+
+```json
+{
+  "syncUrl": "http://127.0.0.1:43111/sync",
+  "syncTimeoutMs": 1500
+}
+```
+
+### Step 3: Run your app
+
+```bash
+npm run dev
+```
+
+Browser and server observations are now automatically synced to the same registry.
+
+### Step 4: Generate types
+
+```bash
+npx typed-fetch generate
+```
+
+All observations (browser + server) are included in generated types.
+
+## Typical Workflow
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Terminal 1: Start listener                              │
+│ $ npx typed-fetch listen                                │
+│ Listening at http://127.0.0.1:43111                     │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│ Terminal 2: Start development server                    │
+│ $ npm run dev                                           │
+│ Server and browser both making API calls...              │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│ Terminal 3: Generate types when ready                   │
+│ $ npx typed-fetch generate                              │
+│ Updated generated/typed-fetch.d.ts                      │
+└─────────────────────────────────────────────────────────┘
+```
+
+## React Integration Example
+
+```tsx
+import { typedFetch } from '@phumudzo/typed-fetch';
+import { useEffect, useState } from 'react';
+
+interface User {
+  id: number;
+  name: string;
+  email: string;
+}
+
+export function UserProfile({ userId }: { userId: number }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      const result = await typedFetch(
+        `/api/user/${userId}`,
+        { method: 'GET' },
+        { endpointKey: 'GET /user/:id' }
+      );
+
+      if (result.status === 200) {
+        setUser(result.data);
+      } else if (result.status === 404) {
+        setError('User not found');
+      } else {
+        setError(`Error: ${result.status}`);
+      }
+
+      setLoading(false);
+    };
+
+    fetchUser();
+  }, [userId]);
+
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error}</div>;
+  if (!user) return null;
+
+  return (
+    <div>
+      <h1>{user.name}</h1>
+      <p>{user.email}</p>
+    </div>
+  );
+}
+```
+
+## CORS & Security
+
+typed-fetch respects CORS policies:
+
+- Follows same-origin policy
+- Honors CORS headers from server
+- Works with credentials: include
+
+```ts
+const result = await typedFetch(
+  'https://api.example.com/user',
+  {
+    method: 'GET',
+    credentials: 'include'
+  },
+  { endpointKey: 'GET /user' }
+);
+```
+
+## localStorage Limits
+
+Browser `localStorage` has limits:
+
+- **Typical limit**: 5-10 MB per origin
+- **Limit depends on browser**
+- **Impact**: Very large registries may exceed limits
+
+**If you hit limits:**
+1. Use `npx typed-fetch clean --registry` to reset
+2. Consider using `observerMode: "none"` in production
+3. Generate types once and disable observation
+
+## Disabling Observation in Browser
+
+To prevent observation in browser (e.g., production):
+
+```json
+{
+  "observerMode": "none"
+}
+```
+
+With this setting:
+- typedFetch still works normally
+- No observations are recorded
+- Uses less memory/storage
+- Generated types still work
+
+Use in production to:
+- Avoid localStorage usage
+- Improve performance
+- Reduce surface area
+- Keep only the type definitions
+
+## Cross-Origin Requests
+
+For cross-origin API calls:
+
+1. **Ensure CORS is configured** on your API
+2. **Use full URLs**:
+   ```ts
+   await typedFetch(
+     'https://api.example.com/data',
+     { method: 'GET' },
+     { endpointKey: 'GET /data' }
+   );
+   ```
+3. **Include credentials if needed**:
+   ```ts
+   await typedFetch(url, {
+     credentials: 'include',
+     headers: {
+       'Authorization': `Bearer ${token}`
+     }
+   }, { endpointKey });
+   ```
+
+## Next: API Reference
+
+Learn about the [TypeScript Types](/docs/api-types) and [Result Object](/docs/result-object).

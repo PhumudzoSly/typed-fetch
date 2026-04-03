@@ -1,0 +1,274 @@
+---
+title: Privacy & Data Handling
+description: How typed-fetch handles privacy and data security
+---
+
+# Privacy & Data Handling
+
+Privacy is a core design principle of typed-fetch. This document explains how data is handled and what protections are in place.
+
+## Core Privacy Model
+
+typed-fetch is designed to be **privacy-first** by default:
+
+1. **Only structure is recorded**, never raw values
+2. **Raw paths are not stored** (in strict privacy mode)
+3. **Sensitive fields are filtered** automatically
+4. **All data stays local** in your project/device
+
+## What Gets Recorded
+
+When `typedFetch` observes an HTTP response, it records:
+
+✅ **Recorded**:
+- Response HTTP status code (200, 404, 500, etc.)
+- Response structure/shape (which fields exist, their types)
+- Array element types (when sampling arrays)
+- Nested object structures
+
+❌ **NOT Recorded**:
+- Raw response values/content
+- User data, credentials, or personal information
+- Raw request URLs (in strict privacy mode)
+- Request/response body content
+
+## Strict Privacy Mode (Default)
+
+By default, `strictPrivacyMode` is enabled:
+
+```json
+{
+  "strictPrivacyMode": true
+}
+```
+
+**In strict privacy mode:**
+- Response structures are recorded
+- The exact endpoint path is **not** stored
+- Only the pattern (e.g., `GET /user/:id`) is recorded
+- Safe for projects with sensitive URL patterns
+
+**When disabled:**
+```json
+{
+  "strictPrivacyMode": false
+}
+```
+
+Exact paths are stored in the registry. Disable only if:
+- Your URLs are public/non-sensitive
+- You need detailed debugging information
+- You're in a private/internal environment
+
+## Automatic Sensitive Field Filtering
+
+By default, fields matching sensitive names are ignored:
+
+```json
+{
+  "ignoreFieldNames": [
+    "password",
+    "token",
+    "secret",
+    "authorization"
+  ]
+}
+```
+
+If you have additional sensitive fields, add them:
+
+```json
+{
+  "ignoreFieldNames": [
+    "password",
+    "token",
+    "secret",
+    "authorization",
+    "creditCard",
+    "ssn",
+    "apiKey",
+    "privateKey"
+  ]
+}
+```
+
+Ignored fields:
+- Are skipped during observation
+- Don't appear in generated types
+- Don't pollute your registry
+
+## What's Stored in the Registry
+
+The `.typed-fetch/registry.json` file contains:
+
+```json
+{
+  "observations": {
+    "GET /user/:id": {
+      "200": {
+        "id": "number",
+        "name": "string",
+        "email": "string"
+      },
+      "404": "null"
+    }
+  },
+  "endpoints": ["GET /user/:id"]
+}
+```
+
+**Safe to commit to version control** because:
+- No raw data values
+- No personal information
+- Only type structure information
+- Useful for your team's type definitions
+
+## Dynamic Segment Normalization
+
+typed-fetch automatically normalizes dynamic URL segments to prevent over-specific patterns:
+
+```
+/user/123        → /user/:id        (numeric pattern)
+/post/550e8400   → /post/:id        (uuid pattern)
+/file/abc123def  → /file/:id        (hash pattern)
+```
+
+This prevents polluting your registry with unique-per-request segments.
+
+## Browser Usage & LocalStorage
+
+In browsers, observations are stored in `localStorage`:
+
+```ts
+// Observations stored at: localStorage['__typed_fetch_registry__']
+const result = await typedFetch(url, { method: 'GET' }, { endpointKey });
+```
+
+**Storage key** (customizable):
+
+```json
+{
+  "browserStorageKey": "__typed_fetch_registry__"
+}
+```
+
+**Privacy notes:**
+- Data is stored locally on the user's device
+- Data persists across browser sessions
+- Data is cleared when localStorage is cleared
+- Not sent to any server (unless using `syncUrl`)
+
+## Server-Side Storage
+
+In Node.js, observations are stored in the file system:
+
+```
+.typed-fetch/registry.json
+```
+
+**You control:**
+- Where the file is stored (`registryPath` config)
+- Whether it's committed to version control
+- Who has access to the file
+- When it's cleaned up
+
+## Syncing Browser & Server
+
+When using `typed-fetch listen`, browser observations are synced:
+
+```json
+{
+  "syncUrl": "http://127.0.0.1:43111/sync"
+}
+```
+
+**During development:**
+- Browser sends structure observations only
+- Server receives and merges into registry
+- Enables unified type generation
+- All communication is local (127.0.0.1 default)
+
+**In production:**
+- Do not enable `syncUrl` or use `observerMode: "none"`
+- Browser observations stay local
+- No server communication needed
+
+## Observing Potentially Sensitive Endpoints
+
+If your application handles sensitive data:
+
+1. **Use URL patterns** that don't expose sensitivity:
+   ```ts
+   // Good - generic pattern
+   { endpointKey: 'GET /user/:id' }
+   
+   // Avoid - specific identifiable patterns
+   { endpointKey: 'GET /user/john-smith' }
+   ```
+
+2. **Filter fields** that are sensitive:
+   ```json
+   {
+     "ignoreFieldNames": ["ssn", "creditCard", "bankAccount"]
+   }
+   ```
+
+3. **Disable observation** for certain endpoints:
+   ```json
+   {
+     "exclude": ["**/payment/**", "**/billing/**"]
+   }
+   ```
+
+4. **Use `observerMode: "none"`** in production:
+   ```json
+   {
+     "observerMode": "none"
+   }
+   ```
+
+## Compliance & Regulations
+
+typed-fetch helps meet privacy regulations:
+
+- **GDPR**: No personal data is stored in the registry
+- **HIPAA**: Can be configured to exclude sensitive fields
+- **PCI-DSS**: Credit card data can be filtered automatically
+- **SOC 2**: Audit trail available via git history of registry
+
+Recommendations:
+- Keep the registry in version control for audit trails
+- Use `strictPrivacyMode: true` (default)
+- Configure `ignoreFieldNames` for your data sensitivity level
+- Review and commit registry changes as part of your workflow
+
+## Clearing Data
+
+To clear all observations:
+
+```bash
+# Remove generated types
+npx typed-fetch clean
+
+# Remove registry and types
+npx typed-fetch clean --registry
+```
+
+This is useful when:
+- You want to start fresh observations
+- Sensitive data was accidentally observed
+- Switching environments or projects
+
+## Transparency
+
+Your team should understand:
+- What's being observed (only structure)
+- Where it's stored (local files or browser localStorage)
+- How long it's kept (until explicitly cleaned)
+- Who has access (those with file system access)
+
+Consider documenting in your project's security policy.
+
+## Next: Browser Support
+
+Learn about [Browser Support](/docs/browser-support).

@@ -1,0 +1,213 @@
+---
+title: CLI Commands
+description: Complete reference for typed-fetch command-line interface
+---
+
+# CLI Commands
+
+All typed-fetch CLI commands can be run with `npx typed-fetch <command>`.
+
+## init
+
+Initialize a new typed-fetch configuration in your project.
+
+```bash
+npx typed-fetch init
+```
+
+Creates `typed-fetch.config.json` with sensible defaults. Use this when setting up a new project or workspace.
+
+**Options**:
+- `--config <path>`: Use a custom config file path
+
+## generate
+
+Generate TypeScript type definitions from the registry.
+
+```bash
+npx typed-fetch generate
+```
+
+Reads the registry (`.typed-fetch/registry.json`) and emits TypeScript declarations to the path specified in config (`generated/typed-fetch.d.ts` by default).
+
+This command:
+- Analyzes all observed response shapes
+- Generates discriminated union types per endpoint
+- Creates TypeScript module augmentation for `TypedFetchGeneratedResponses`
+- Produces human-readable, formatted output
+
+**Options**:
+- `--config <path>`: Use a custom config file path
+
+**Example output** (`generated/typed-fetch.d.ts`):
+
+```ts
+declare module '@phumudzo/typed-fetch' {
+  interface TypedFetchGeneratedResponses {
+    'GET /user/:id': {
+      200: {
+        id: number;
+        name: string;
+        email: string;
+      };
+      404: null;
+    };
+    'POST /user': {
+      201: {
+        id: number;
+        name: string;
+      };
+      400: {
+        error: string;
+      };
+    };
+  }
+}
+```
+
+## check
+
+Validate the registry and configuration.
+
+```bash
+npx typed-fetch check
+```
+
+Performs validation checks:
+- Ensures `typed-fetch.config.json` exists and is valid JSON
+- Checks that registry file is readable and valid
+- Reports on number of tracked endpoints
+- Lists any configuration issues
+
+Useful for CI/CD pipelines to ensure configuration integrity.
+
+**Options**:
+- `--config <path>`: Use a custom config file path
+
+## clean
+
+Remove generated artifacts and optionally the registry.
+
+```bash
+npx typed-fetch clean
+```
+
+Removes:
+- Generated TypeScript declaration file
+- `.typed-fetch/` directory (if `--registry` flag is used)
+
+**Options**:
+- `--registry`: Also remove the registry file (`.typed-fetch/registry.json`)
+- `--config <path>`: Use a custom config file path
+
+**Example**: Clean everything including observations
+
+```bash
+npx typed-fetch clean --registry
+```
+
+## watch
+
+Watch for changes and automatically generate types.
+
+```bash
+npx typed-fetch watch
+```
+
+Continuously monitors the registry file. When changes are detected:
+- Automatically regenerates TypeScript declarations
+- Useful during development to keep types in sync with observations
+- Watches both file system and config changes
+
+Press `Ctrl+C` to stop watching.
+
+**Options**:
+- `--config <path>`: Use a custom config file path
+
+## listen
+
+Start a sync server for browser observations (development only).
+
+```bash
+npx typed-fetch listen
+```
+
+Starts a lightweight HTTP server at `http://127.0.0.1:43111` (by default) that:
+- Receives observations from browser clients
+- Merges them into the main registry
+- Enables mixed client/server type observation
+
+Use this when developing applications with both browser and server-side API calls.
+
+**Configuration**: Update `syncUrl` in `typed-fetch.config.json`:
+
+```json
+{
+  "syncUrl": "http://127.0.0.1:43111/sync"
+}
+```
+
+The browser will then send observations to this URL automatically.
+
+**Typical workflow**:
+1. Terminal 1: `npx typed-fetch listen` (runs in background)
+2. Terminal 2: `npm run dev` (your app)
+3. Browser: Navigate and use app
+4. Terminal 2: `npx typed-fetch generate` (when done)
+
+---
+
+## Global Options
+
+All commands accept:
+
+- `--config <path>`: Path to custom config file (default: `typed-fetch.config.json`)
+- `--help`: Show command help
+- `--version`: Show typed-fetch version
+
+**Example with custom config**:
+
+```bash
+npx typed-fetch generate --config ./config/api-types.json
+npx typed-fetch watch --config ./monorepo/config.json
+```
+
+## Typical Development Workflow
+
+```bash
+# 1. Initialize project
+npx typed-fetch init
+
+# 2. Start listening for observations (keep running)
+npx typed-fetch listen &
+
+# 3. Run your app/tests
+npm run dev
+# Use your app, make API calls
+
+# 4. Generate types when done
+npx typed-fetch generate
+
+# 5. (Optional) Keep watching for changes
+npx typed-fetch watch
+```
+
+## CI/CD Integration
+
+```bash
+# Validate configuration
+npx typed-fetch check
+
+# Clean old artifacts
+npx typed-fetch clean
+
+# Generate types from committed registry
+npx typed-fetch generate
+
+# Run your build
+npm run build
+```
+
+## Next: Privacy & Data Handling
+
+Learn about [Privacy & Data Handling](/docs/privacy).

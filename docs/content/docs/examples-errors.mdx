@@ -1,0 +1,488 @@
+---
+title: Error Handling
+description: Patterns and best practices for error handling with typed-fetch
+---
+
+# Error Handling
+
+Comprehensive guide to error handling patterns with typed-fetch.
+
+## Overview
+
+typed-fetch never throws exceptions. All errors are returned in the result object:
+
+```ts
+const result = await typedFetch(url, init, { endpointKey });
+
+// Always returns a result object - no exceptions thrown
+if (result.status === 0) {
+  // Network error
+} else if (!result.ok) {
+  // HTTP error (4xx, 5xx, etc.)
+} else {
+  // Success
+}
+```
+
+## Network Errors
+
+Network errors occur when the fetch request fails (no response received).
+
+```ts
+const result = await typedFetch(url, init, { endpointKey });
+
+if (result.status === 0) {
+  // Network error occurred
+  console.error('Network error:', result.error?.message);
+
+  // Common reasons:
+  // - No internet connection
+  // - DNS lookup failed
+  // - Server unreachable
+  // - Request timeout
+  // - CORS issue
+}
+```
+
+### Detecting Specific Network Errors
+
+```ts
+const result = await typedFetch(url, init, { endpointKey });
+
+if (result.status === 0) {
+  const errorName = result.error?.name;
+
+  if (errorName === 'AbortError') {
+    console.log('Request was aborted/timed out');
+  } else if (errorName === 'TypeError') {
+    console.log('Network request failed');
+  } else {
+    console.log('Unknown network error:', errorName);
+  }
+}
+```
+
+## HTTP Errors
+
+HTTP errors occur when the server responds with an error status (4xx, 5xx).
+
+```ts
+const result = await typedFetch(url, init, { endpointKey });
+
+if (result.status >= 400 && result.status < 600) {
+  // HTTP error
+  console.error(`HTTP ${result.status}:`, result.data);
+}
+```
+
+### Status-Specific Handling
+
+```ts
+const result = await typedFetch(url, init, { endpointKey });
+
+switch (result.status) {
+  case 200:
+  case 201:
+    // Success
+    console.log('Success:', result.data);
+    break;
+
+  case 400:
+    // Bad Request - validation error
+    console.error('Validation error:', result.data?.errors);
+    break;
+
+  case 401:
+    // Unauthorized - need to login
+    console.error('Not authenticated');
+    // Redirect to login
+    break;
+
+  case 403:
+    // Forbidden - don't have permission
+    console.error('Access denied');
+    break;
+
+  case 404:
+    // Not Found
+    console.error('Resource not found');
+    break;
+
+  case 429:
+    // Rate Limited
+    const retryAfter = result.response?.headers.get('Retry-After');
+    console.error(`Rate limited. Retry after ${retryAfter}s`);
+    break;
+
+  case 500:
+  case 502:
+  case 503:
+    // Server errors - try again later
+    console.error('Server error - please try again later');
+    break;
+
+  case 0:
+    // Network error
+    console.error('Network error:', result.error);
+    break;
+
+  default:
+    console.error(`Unexpected status: ${result.status}`);
+}
+```
+
+## Error Handling Patterns
+
+### Try-Catch Style
+
+```ts
+async function getUser(id: number) {
+  const result = await typedFetch(
+    `/api/user/${id}`,
+    { method: 'GET' },
+    { endpointKey: 'GET /user/:id' }
+  );
+
+  if (result.status === 0) {
+    throw new Error(`Network error: ${result.error?.message}`);
+  }
+
+  if (result.status === 404) {
+    throw new Error('User not found');
+  }
+
+  if (!result.ok) {
+    throw new Error(`Error: ${result.status}`);
+  }
+
+  return result.data;
+}
+
+// Caller can use try-catch if desired:
+try {
+  const user = await getUser(1);
+  console.log(user);
+} catch (e) {
+  console.error(e);
+}
+```
+
+### Result Pattern
+
+```ts
+function handleResult<T>(result: TypedFetchResult<any>): T | null {
+  if (result.status === 0) {
+    console.error('Network error:', result.error);
+    return null;
+  }
+
+  if (!result.ok) {
+    console.error(`HTTP ${result.status}:`, result.data);
+    return null;
+  }
+
+  return result.data;
+}
+
+// Usage:
+const user = handleResult(await typedFetch(...));
+if (user) {
+  console.log(user.name);
+}
+```
+
+### Either Pattern (Success/Failure)
+
+```ts
+type Either<E, A> = { type: 'error'; error: E } | { type: 'success'; data: A };
+
+function toEither<K extends string>(
+  result: TypedFetchResult<K>
+): Either<string, any> {
+  if (result.status === 0) {
+    return {
+      type: 'error',
+      error: `Network error: ${result.error?.message}`
+    };
+  }
+
+  if (!result.ok) {
+    return {
+      type: 'error',
+      error: `HTTP ${result.status}`
+    };
+  }
+
+  return {
+    type: 'success',
+    data: result.data
+  };
+}
+
+// Usage:
+const either = toEither(await typedFetch(...));
+if (either.type === 'success') {
+  console.log(either.data);
+} else {
+  console.error(either.error);
+}
+```
+
+## Request Timeout
+
+Add timeout to prevent hanging requests:
+
+```ts
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit = {},
+  options: { endpointKey: string },
+  timeoutMs = 5000
+) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  const result = await typedFetch(url, {
+    ...init,
+    signal: controller.signal
+  }, options);
+
+  clearTimeout(timeoutId);
+  return result;
+}
+
+// Usage:
+const result = await fetchWithTimeout(
+  '/api/data',
+  { method: 'GET' },
+  { endpointKey: 'GET /data' },
+  3000 // 3 second timeout
+);
+```
+
+## Retry with Exponential Backoff
+
+```ts
+async function fetchWithRetry<K extends string>(
+  url: string,
+  init: RequestInit = {},
+  options: { endpointKey: K },
+  maxRetries = 3,
+  delayMs = 1000
+) {
+  let lastResult;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    lastResult = await typedFetch(url, init, options);
+
+    // Success - don't retry
+    if (lastResult.ok) {
+      return lastResult;
+    }
+
+    // Client error (4xx) - don't retry
+    if (lastResult.status >= 400 && lastResult.status < 500 && lastResult.status !== 0) {
+      return lastResult;
+    }
+
+    // Server error or network error - retry if attempts left
+    if (attempt < maxRetries) {
+      const delay = delayMs * Math.pow(2, attempt);
+      console.log(`Retry in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  return lastResult;
+}
+
+// Usage:
+const result = await fetchWithRetry(
+  '/api/data',
+  { method: 'GET' },
+  { endpointKey: 'GET /data' },
+  3,   // max retries
+  1000 // initial delay
+);
+```
+
+## Logging & Monitoring
+
+```ts
+async function fetchWithLogging<K extends string>(
+  url: string,
+  init: RequestInit = {},
+  options: { endpointKey: K }
+) {
+  const startTime = Date.now();
+  const result = await typedFetch(url, init, options);
+  const duration = Date.now() - startTime;
+
+  console.log({
+    endpoint: options.endpointKey,
+    status: result.status,
+    duration,
+    success: result.ok,
+    error: result.status === 0 ? result.error?.message : undefined
+  });
+
+  // Send to monitoring service
+  if (!result.ok && result.status !== 0) {
+    monitoringService.trackError({
+      status: result.status,
+      endpoint: options.endpointKey
+    });
+  }
+
+  return result;
+}
+```
+
+## React Error Handling
+
+```tsx
+export function UserProfile({ userId }: { userId: number }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      const result = await typedFetch(
+        `/api/user/${userId}`,
+        { method: 'GET' },
+        { endpointKey: 'GET /user/:id' }
+      );
+
+      setLoading(false);
+
+      if (result.status === 200) {
+        setData(result.data);
+      } else if (result.status === 404) {
+        setError('User not found');
+      } else if (result.status === 0) {
+        setError('Network error - please check your connection');
+      } else {
+        setError(`Error: ${result.status}`);
+      }
+    };
+
+    fetchUser();
+  }, [userId]);
+
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div className="error">{error}</div>;
+  if (!data) return null;
+
+  return <div>{data.name}</div>;
+}
+```
+
+## Validation Error Handling
+
+```ts
+const result = await typedFetch(
+  '/api/user',
+  {
+    method: 'POST',
+    body: JSON.stringify({ name, email })
+  },
+  { endpointKey: 'POST /user' }
+);
+
+if (result.status === 400 && result.data?.errors) {
+  // Server returned validation errors
+  const errors = result.data.errors;
+
+  errors.forEach((err: any) => {
+    console.error(`Field "${err.field}": ${err.message}`);
+  });
+} else if (result.status === 201) {
+  // Success
+  return result.data;
+}
+```
+
+## Best Practices
+
+✅ **Do:**
+- Check `status` explicitly for different outcomes
+- Use `if (result.ok)` for success checking
+- Handle network errors (status 0) separately
+- Log errors for monitoring
+- Implement retry logic for transient errors
+
+❌ **Don't:**
+- Assume success without checking status
+- Ignore network errors
+- Use try-catch unnecessarily (typedFetch doesn't throw)
+- Retry on client errors (4xx, except 429)
+- Store raw errors in logs (log safely)
+
+## Complete Error Handler Utility
+
+```ts
+export interface HandledResult<T> {
+  ok: boolean;
+  data?: T;
+  error?: {
+    message: string;
+    status: number;
+    retryable: boolean;
+  };
+}
+
+export async function handleFetch<K extends string, T = any>(
+  url: string,
+  init: RequestInit = {},
+  options: { endpointKey: K }
+): Promise<HandledResult<T>> {
+  const result = await typedFetch(url, init, options);
+
+  if (result.ok) {
+    return { ok: true, data: result.data };
+  }
+
+  const isRetryable = result.status === 0 || result.status >= 500;
+
+  if (result.status === 0) {
+    return {
+      ok: false,
+      error: {
+        message: result.error?.message || 'Network error',
+        status: 0,
+        retryable: true
+      }
+    };
+  }
+
+  return {
+    ok: false,
+    error: {
+      message: result.data?.message || `HTTP ${result.status}`,
+      status: result.status,
+      retryable: isRetryable
+    }
+  };
+}
+
+// Usage:
+const result = await handleFetch<User>(
+  '/api/user/1',
+  { method: 'GET' },
+  { endpointKey: 'GET /user/:id' }
+);
+
+if (result.ok) {
+  console.log(result.data.name);
+} else {
+  console.error(result.error.message);
+  if (result.error.retryable) {
+    console.log('This error is retryable');
+  }
+}
+```
+
+## Next Steps
+
+Explore more [Examples](/docs/examples-react) or check the [API Reference](/docs/api-types).
