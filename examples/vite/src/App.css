@@ -1,0 +1,80 @@
+:root {
+  font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  color: #18222f;
+  background: radial-gradient(circle at top right, #e8f3ff 0%, #f7fbff 45%, #fdfefe 100%);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2rem 1rem 3rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.panel {
+  background: #ffffffd9;
+  border: 1px solid #d3e3f3;
+  border-radius: 14px;
+  padding: 1.2rem;
+  box-shadow: 0 14px 30px -24px #4f7ca833;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #41759c;
+}
+
+h1 {
+  margin: 0.4rem 0 0.8rem;
+  font-size: 1.8rem;
+  line-height: 1.2;
+}
+
+h2 {
+  margin-top: 0;
+}
+
+.lead {
+  margin: 0;
+  color: #335066;
+}
+
+.runButton {
+  margin-top: 1rem;
+  border: 0;
+  border-radius: 10px;
+  padding: 0.72rem 1rem;
+  font-size: 0.96rem;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #0f7acb, #0958a8);
+  cursor: pointer;
+}
+
+.hints {
+  margin: 1rem 0 0;
+  padding-left: 1.1rem;
+  color: #2c4f67;
+}
+
+.resultPanel pre {
+  margin: 0.8rem 0 0;
+  padding: 0.8rem;
+  background: #0f172114;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  overflow-x: auto;
+}
