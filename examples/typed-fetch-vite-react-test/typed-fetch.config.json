@@ -1,6 +1,6 @@
 {
   "registryPath": ".typed-fetch/registry.json",
-  "generatedPath": "generated/typed-fetch.d.ts",
+  "generatedPath": "src/generated/typed-fetch.d.ts",
   "include": [],
   "exclude": [],
   "dynamicSegmentPatterns": [
