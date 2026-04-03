@@ -1,10 +1,9 @@
 import * as vscode from "vscode";
-import { ChildProcess, exec, spawn } from "child_process";
+import { exec } from "child_process";
 import { promisify } from "util";
 import * as path from "path";
 
 const execAsync = promisify(exec);
-let listenerProcess: ChildProcess | undefined;
 
 function getWorkspaceFolderForActiveFile(): vscode.WorkspaceFolder | undefined {
   const activeEditor = vscode.window.activeTextEditor;
@@ -55,62 +54,19 @@ async function generateTypes(output: vscode.OutputChannel): Promise<void> {
   }
 }
 
-function startListener(output: vscode.OutputChannel): void {
+function startWatch(): void {
   const root = getWorkspaceRoot();
   if (!root) {
     vscode.window.showErrorMessage("No workspace folder open.");
     return;
   }
-  if (listenerProcess && !listenerProcess.killed) {
-    vscode.window.showWarningMessage("Typed Fetch listener is already running.");
-    return;
-  }
 
-  const config = vscode.workspace.getConfiguration("typedFetchTools");
-  const port = Number(config.get("listenPort", 43111));
-  const allowNetwork = Boolean(config.get("allowNetwork", false));
-
-  const args = ["typed-fetch", "listen", "--port", String(port)];
-  if (allowNetwork) args.push("--allow-network");
-
-  output.appendLine(`> npx ${args.join(" ")}`);
-  listenerProcess = spawn("npx", args, {
+  const terminal = vscode.window.createTerminal({
+    name: "Typed Fetch Watch",
     cwd: root,
-    shell: true,
-    windowsHide: true,
   });
-
-  listenerProcess.stdout?.on("data", (d) => output.append(d.toString()));
-  listenerProcess.stderr?.on("data", (d) => output.append(d.toString()));
-  listenerProcess.on("error", (error) => {
-    showFailure(`Typed Fetch listener failed to start: ${error.message}`, output);
-    listenerProcess = undefined;
-  });
-  listenerProcess.on("exit", (code) => {
-    output.appendLine(`listener exited with code ${code ?? 0}`);
-    listenerProcess = undefined;
-  });
-
-  vscode.window.showInformationMessage("Typed Fetch listener started.");
-}
-
-function stopListener(output: vscode.OutputChannel): void {
-  if (!listenerProcess || listenerProcess.killed) {
-    vscode.window.showInformationMessage("Typed Fetch listener is not running.");
-    return;
-  }
-
-  const pid = listenerProcess.pid;
-  if (pid) {
-    if (process.platform === "win32") {
-      exec(`taskkill /pid ${pid} /t /f`);
-    } else {
-      listenerProcess.kill("SIGTERM");
-    }
-  }
-
-  output.appendLine("listener stop requested");
-  vscode.window.showInformationMessage("Typed Fetch listener stopped.");
+  terminal.show();
+  terminal.sendText("npx typed-fetch watch");
 }
 
 async function runCurrentFileAndGenerate(output: vscode.OutputChannel): Promise<void> {
@@ -125,9 +81,9 @@ async function runCurrentFileAndGenerate(output: vscode.OutputChannel): Promise<
   const ext = path.extname(filePath).toLowerCase();
   try {
     if (ext === ".ts") {
-      await runCommand(`npx tsx \"${filePath}\"`, root, output);
+      await runCommand(`npx tsx "${filePath}"`, root, output);
     } else {
-      await runCommand(`node \"${filePath}\"`, root, output);
+      await runCommand(`node "${filePath}"`, root, output);
     }
     await generateTypes(output);
   } catch (error) {
@@ -150,6 +106,12 @@ class TypedFetchCodeLensProvider implements vscode.CodeLensProvider {
         new vscode.CodeLens(range, {
           title: "Typed Fetch: Generate",
           command: "typedFetch.generate",
+        }),
+      );
+      lenses.push(
+        new vscode.CodeLens(range, {
+          title: "Typed Fetch: Watch",
+          command: "typedFetch.watch",
         }),
       );
       lenses.push(
@@ -177,8 +139,7 @@ class TypedFetchHoverProvider implements vscode.HoverProvider {
         "**Typed Fetch Actions**",
         "",
         "- [Generate Types](command:typedFetch.generate)",
-        "- [Start Listener](command:typedFetch.listenerStart)",
-        "- [Stop Listener](command:typedFetch.listenerStop)",
+        "- [Watch (auto-regenerate)](command:typedFetch.watch)",
         "- [Run Current File + Generate](command:typedFetch.runAndGenerate)",
       ].join("\n"),
       true,
@@ -196,8 +157,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     output,
     vscode.commands.registerCommand("typedFetch.generate", () => generateTypes(output)),
-    vscode.commands.registerCommand("typedFetch.listenerStart", () => startListener(output)),
-    vscode.commands.registerCommand("typedFetch.listenerStop", () => stopListener(output)),
+    vscode.commands.registerCommand("typedFetch.watch", () => startWatch()),
     vscode.commands.registerCommand("typedFetch.runAndGenerate", () => runCurrentFileAndGenerate(output)),
     vscode.languages.registerCodeLensProvider(
       [{ language: "typescript" }, { language: "javascript" }],
@@ -211,12 +171,5 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {
-  if (listenerProcess && !listenerProcess.killed) {
-    const pid = listenerProcess.pid;
-    if (pid && process.platform === "win32") {
-      exec(`taskkill /pid ${pid} /t /f`);
-    } else {
-      listenerProcess.kill("SIGTERM");
-    }
-  }
+  // No persistent processes to clean up.
 }
