@@ -6,8 +6,8 @@ settings:
 
 dependencies:
   '@phumudzo/typed-fetch':
-    specifier: ^0.1.8
-    version: 0.1.8
+    specifier: ^0.1.9
+    version: 0.1.9
   react:
     specifier: ^19.2.4
     version: 19.2.4
@@ -610,8 +610,8 @@ packages:
     resolution: {integrity: sha512-oLAl5kBpV4w69UtFZ9xqcmTi+GENWOcPF7FCrczTiBbmC0ibXxCwyvZGbO39rCVEuLGAZM84DH0pUIyyv/YJzA==}
     dev: true
 
-  /@phumudzo/typed-fetch@0.1.8:
-    resolution: {integrity: sha512-od5SGcZHgZbKtG3lOlucru1LRdHNRDyJY5sdtb55oj39dTtsaVRa941FHX/gsi/leSCPSvBV3rhUGodTZl4Txg==}
+  /@phumudzo/typed-fetch@0.1.9:
+    resolution: {integrity: sha512-9e1Dcu5Ke8TBoigQYuJHQ75ldLPdjeOIQ9GCgch/MHX4+n9xj9g30Psh3qnZh+0aCPYt7s8q/+YUYLpvNBa2nw==}
     engines: {node: '>=18'}
     hasBin: true
     dependencies:

@@ -17,6 +17,5 @@
     "authorization"
   ],
   "strictPrivacyMode": true,
-  "observerMode": "auto",
-  "observerPort": 7779
+  "observerMode": "auto"
 }

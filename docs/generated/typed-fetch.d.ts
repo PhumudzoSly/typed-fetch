@@ -4,7 +4,7 @@
 declare module "@phumudzo/typed-fetch" {
   interface TypedFetchGeneratedResponses {
     "GET /posts/:id": {
-      200: { body: string; id: number; title: string; userId: number };
+      200: { "body": string; "id": number; "title": string; "userId": number; };
     };
   }
 }
