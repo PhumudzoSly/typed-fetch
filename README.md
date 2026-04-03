@@ -89,15 +89,6 @@ Create `typed-fetch.config.json` in your project root:
 
 [Typed Fetch Tools](https://marketplace.visualstudio.com/items?itemName=phumudzo.typed-fetch-tools) adds CodeLens and quick actions for generation and listener workflows directly in VS Code.
 
-## Documentation
-
-Full docs: https://typed-fetch.vercel.app/
-
-- Getting Started: https://typed-fetch.vercel.app/docs
-- Basic Usage: https://typed-fetch.vercel.app/docs/basic-usage
-- Configuration: https://typed-fetch.vercel.app/docs/configuration
-- CLI Commands: https://typed-fetch.vercel.app/docs/cli-commands
-
 ## License
 
 MIT © Phumudzo
