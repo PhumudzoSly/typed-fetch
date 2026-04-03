@@ -1,4 +1,5 @@
 import { queueRegistryObservation } from "./core/file-observer";
+import { postObservationToServer } from "./core/http-observer";
 import { loadConfig } from "./core/config";
 import { shouldTrackEndpoint } from "./core/filter";
 import { normalizeEndpointKey } from "./core/normalize";
@@ -287,6 +288,17 @@ export async function typedFetch<K extends EndpointKey = EndpointKey>(
             status: response.status,
             shape,
             observedAt: new Date(),
+            rawPath: config.strictPrivacyMode ? undefined : pathname,
+          },
+        });
+      } else if (mode === "http" || (mode === "auto" && !isNodeRuntime)) {
+        postObservationToServer({
+          observerPort: config.observerPort,
+          observation: {
+            endpointKey,
+            status: response.status,
+            shape,
+            observedAt: new Date().toISOString(),
             rawPath: config.strictPrivacyMode ? undefined : pathname,
           },
         });

@@ -47,7 +47,13 @@ export type TypedFetchConfig = {
   maxArraySample: number;
   ignoreFieldNames: string[];
   strictPrivacyMode: boolean;
-  observerMode: "auto" | "file" | "none";
+  observerMode: "auto" | "file" | "http" | "none";
+  /**
+   * Port for the local HTTP observer server started by `typed-fetch watch`.
+   * The browser-side runtime posts observations here when running outside Node.
+   * @default 7779
+   */
+  observerPort: number;
   /**
    * Manual type overrides for specific endpoint+status pairs.
    * Takes precedence over inferred shapes during generation.
