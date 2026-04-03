@@ -4,13 +4,17 @@ import { shouldTrackEndpoint } from "./core/filter";
 import { normalizeEndpointKey } from "./core/normalize";
 import { inferShape } from "./core/shape";
 import type {
+  EndpointKey,
   ShapeNode,
   TypedFetchConfig,
   TypedFetchRequestInit,
   TypedFetchSuccessStatuses,
 } from "./core/types";
 
-type FetchFunction = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+type FetchFunction = (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+) => Promise<Response>;
 
 const isNodeRuntime =
   typeof process !== "undefined" &&
@@ -36,18 +40,35 @@ function parsePathname(input: RequestInfo | URL): string {
 }
 
 function isJsonContentType(contentType: string | null): boolean {
-  return Boolean(contentType && contentType.toLowerCase().includes("application/json"));
+  return Boolean(
+    contentType && contentType.toLowerCase().includes("application/json"),
+  );
 }
 
-function emitDevWarning(message: string): void {
+function emitDevWarning(message: string, code = "TYPED_FETCH_WARNING"): void {
   if (isNodeRuntime && typeof process.emitWarning === "function") {
-    process.emitWarning(message, { code: "TYPED_FETCH_KEY_MISMATCH" });
+    process.emitWarning(message, { code });
   } else if (typeof console !== "undefined") {
     console.warn(`[typed-fetch] ${message}`);
   }
 }
 
-function warnIfKeyMismatch(endpointKey: string, method: string, pathname: string): void {
+function isValidEndpointKeyFormat(endpointKey: string): boolean {
+  const spaceIdx = endpointKey.indexOf(" ");
+  if (spaceIdx <= 0 || spaceIdx !== endpointKey.lastIndexOf(" ")) {
+    return false;
+  }
+
+  const method = endpointKey.slice(0, spaceIdx);
+  const path = endpointKey.slice(spaceIdx + 1);
+  return /^[A-Z]+$/.test(method) && path.startsWith("/") && path.length > 0;
+}
+
+function warnIfKeyMismatch(
+  endpointKey: string,
+  method: string,
+  pathname: string,
+): void {
   const spaceIdx = endpointKey.indexOf(" ");
   if (spaceIdx === -1) {
     return; // Key doesn't follow "METHOD /path" format — skip.
@@ -59,6 +80,7 @@ function warnIfKeyMismatch(endpointKey: string, method: string, pathname: string
   if (keyMethod !== method.toUpperCase()) {
     emitDevWarning(
       `endpointKey method "${keyMethod}" does not match request method "${method.toUpperCase()}" (key: "${endpointKey}")`,
+      "TYPED_FETCH_KEY_MISMATCH",
     );
     return;
   }
@@ -69,6 +91,7 @@ function warnIfKeyMismatch(endpointKey: string, method: string, pathname: string
   if (keySegments.length !== actualSegments.length) {
     emitDevWarning(
       `endpointKey "${endpointKey}" has ${keySegments.length} path segment(s) but actual path "${pathname}" has ${actualSegments.length}`,
+      "TYPED_FETCH_KEY_MISMATCH",
     );
     return;
   }
@@ -78,6 +101,7 @@ function warnIfKeyMismatch(endpointKey: string, method: string, pathname: string
     if (!keySeg.startsWith(":") && keySeg !== actualSegments[i]) {
       emitDevWarning(
         `endpointKey "${endpointKey}" static segment "${keySeg}" does not match actual path segment "${actualSegments[i]}" (position ${i})`,
+        "TYPED_FETCH_KEY_MISMATCH",
       );
       return;
     }
@@ -107,14 +131,16 @@ type StatusLike = number | `${number}`;
 type ToNumericStatus<S extends StatusLike> = S extends number
   ? S
   : S extends `${infer N extends number}`
-  ? N
-  : number;
+    ? N
+    : number;
 
 type KnownEndpointResult<K extends KnownEndpointKey> = {
   [S in keyof TypedFetchGeneratedResponses[K]]: {
     endpoint: K;
     status: ToNumericStatus<S & StatusLike>;
-    ok: ToNumericStatus<S & StatusLike> extends TypedFetchSuccessStatuses ? true : false;
+    ok: ToNumericStatus<S & StatusLike> extends TypedFetchSuccessStatuses
+      ? true
+      : false;
     data: TypedFetchGeneratedResponses[K][S];
     response: Response;
   };
@@ -127,7 +153,7 @@ type KnownEndpointResult<K extends KnownEndpointKey> = {
  * Discriminate from a normal result by checking `result.error` or
  * `result.status === 0`.
  */
-export type TypedFetchNetworkError<K extends string = string> = {
+export type TypedFetchNetworkError<K extends EndpointKey = EndpointKey> = {
   endpoint: K;
   /** Always 0 for network errors — no HTTP response was received. */
   status: 0;
@@ -137,7 +163,7 @@ export type TypedFetchNetworkError<K extends string = string> = {
   error: Error;
 };
 
-export type TypedFetchResult<K extends string = string> =
+export type TypedFetchResult<K extends EndpointKey = EndpointKey> =
   | TypedFetchNetworkError<K>
   | (K extends KnownEndpointKey
       ? KnownEndpointResult<K>
@@ -150,7 +176,7 @@ export type TypedFetchResult<K extends string = string> =
           error?: undefined;
         });
 
-type TypedFetchOptions<K extends string> = {
+type TypedFetchOptions<K extends EndpointKey> = {
   endpointKey: K;
   config?: Partial<TypedFetchConfig>;
   configPath?: string;
@@ -183,12 +209,31 @@ type TypedFetchOptions<K extends string> = {
  *   console.log(result.data); // typed as the 200 response shape
  * }
  */
-export async function typedFetch<K extends string = string>(
+export async function typedFetch<K extends EndpointKey = EndpointKey>(
   input: RequestInfo | URL,
   init: TypedFetchRequestInit | undefined,
-  options: TypedFetchOptions<K>
+  options: TypedFetchOptions<K>,
 ): Promise<TypedFetchResult<K>> {
-  const config = loadConfig(options?.config, { configPath: options?.configPath });
+  const config = loadConfig(options?.config, {
+    configPath: options?.configPath,
+  });
+  const endpointKey = options.endpointKey;
+  const method = init?.method ?? "GET";
+
+  if (
+    !endpointKey ||
+    typeof endpointKey !== "string" ||
+    !isValidEndpointKeyFormat(endpointKey)
+  ) {
+    const inferred = normalizeEndpointKey({
+      input,
+      method,
+      dynamicSegmentPatterns: config.dynamicSegmentPatterns,
+    });
+    throw new Error(
+      `typedFetch requires an endpointKey matching \"METHOD /path\" (e.g. \"GET /users/:id\"). Suggested key: \"${inferred}\"`,
+    );
+  }
 
   let response: Response;
   try {
@@ -200,22 +245,11 @@ export async function typedFetch<K extends string = string>(
       ok: false,
       data: undefined,
       response: null,
-      error: fetchError instanceof Error ? fetchError : new Error(String(fetchError)),
+      error:
+        fetchError instanceof Error
+          ? fetchError
+          : new Error(String(fetchError)),
     } as TypedFetchNetworkError<K> as TypedFetchResult<K>;
-  }
-
-  const endpointKey = options.endpointKey;
-  const method = init?.method ?? "GET";
-
-  if (!endpointKey || typeof endpointKey !== "string") {
-    const inferred = normalizeEndpointKey({
-      input,
-      method,
-      dynamicSegmentPatterns: config.dynamicSegmentPatterns,
-    });
-    throw new Error(
-      `typedFetch requires an explicit endpointKey. Suggested key: "${inferred}"`,
-    );
   }
 
   let data: unknown = undefined;
@@ -230,6 +264,10 @@ export async function typedFetch<K extends string = string>(
     } catch {
       data = undefined;
       shape = { kind: "unknown" };
+      emitDevWarning(
+        `Response for "${endpointKey}" has content-type application/json but body failed to parse. Shape recorded as unknown.`,
+        "TYPED_FETCH_JSON_PARSE_FAILED",
+      );
     }
   } else {
     shape = { kind: "unknown" };
@@ -273,10 +311,10 @@ export async function typedFetch<K extends string = string>(
  *
  * @see typedFetch
  */
-export function tFetch<K extends string = string>(
+export function tFetch<K extends EndpointKey = EndpointKey>(
   input: RequestInfo | URL,
   init: TypedFetchRequestInit | undefined,
-  options: TypedFetchOptions<K>
+  options: TypedFetchOptions<K>,
 ): Promise<TypedFetchResult<K>> {
   return typedFetch(input, init, options);
 }

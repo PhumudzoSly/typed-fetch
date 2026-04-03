@@ -127,3 +127,14 @@ test("typedFetch returns TypedFetchNetworkError on connection failure", async ()
   assert.ok(result.error instanceof Error);
 });
 
+test("typedFetch rejects malformed endpointKey before issuing request", async () => {
+  await assert.rejects(
+    () =>
+      typedFetch("http://127.0.0.1:1", undefined, {
+        endpointKey: "users/1",
+        config: { observerMode: "none" },
+      }),
+    /requires an endpointKey matching "METHOD \/path"/
+  );
+});
+
