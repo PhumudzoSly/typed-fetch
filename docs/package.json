@@ -6,12 +6,15 @@
     "build": "next build",
     "dev": "next dev",
     "start": "next start",
+    "test:typed-fetch": "node ./scripts/test-typed-fetch.mjs",
+    "test:safe": "pnpm test:typed-fetch && pnpm types:check && pnpm build",
     "types:check": "fumadocs-mdx && next typegen && tsc --noEmit",
     "postinstall": "fumadocs-mdx",
     "lint": "biome check",
     "format": "biome format --write"
   },
   "dependencies": {
+    "@phumudzo/typed-fetch": "^0.1.6",
     "fumadocs-core": "16.7.10",
     "fumadocs-mdx": "14.2.11",
     "fumadocs-ui": "16.7.10",
@@ -22,6 +25,7 @@
     "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.9",
     "@tailwindcss/postcss": "^4.2.2",
     "@types/mdx": "^2.0.13",
     "@types/node": "^25.5.0",
@@ -29,7 +33,6 @@
     "@types/react-dom": "^19.2.3",
     "postcss": "^8.5.8",
     "tailwindcss": "^4.2.2",
-    "typescript": "^6.0.2",
-    "@biomejs/biome": "^2.4.9"
+    "typescript": "^6.0.2"
   }
 }
