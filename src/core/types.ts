@@ -41,23 +41,8 @@ export type TypedFetchConfig = {
   maxArraySample: number;
   ignoreFieldNames: string[];
   strictPrivacyMode: boolean;
-  observerMode: "auto" | "file" | "localStorage" | "none";
-  browserStorageKey: string;
-  syncUrl?: string;
-  syncTimeoutMs: number;
+  observerMode: "auto" | "file" | "none";
 };
-
-export type ObservationPayload = {
-  endpointKey: string;
-  status: number;
-  shape: ShapeNode;
-  observedAt: string;
-  source: "node" | "browser";
-};
-
-export type RegistrySyncPayload =
-  | { type: "observation"; observation: ObservationPayload }
-  | { type: "registry"; registry: Registry };
 
 export type TypedFetchRequestInit = RequestInit;
 

@@ -1,13 +1,9 @@
 import { queueRegistryObservation } from "./core/file-observer";
 import { loadConfig } from "./core/config";
-import { hasLocalStorage, loadBrowserRegistry, saveBrowserRegistry } from "./core/browser-registry";
 import { shouldTrackEndpoint } from "./core/filter";
 import { normalizeEndpointKey } from "./core/normalize";
-import { observeShape } from "./core/registry";
 import { inferShape } from "./core/shape";
-import { pushObservation } from "./core/sync";
 import type {
-  ObservationPayload,
   ShapeNode,
   TypedFetchConfig,
   TypedFetchRequestInit,
@@ -41,10 +37,6 @@ function parsePathname(input: RequestInfo | URL): string {
 
 function isJsonContentType(contentType: string | null): boolean {
   return Boolean(contentType && contentType.toLowerCase().includes("application/json"));
-}
-
-function isNodeWritableRuntime(): boolean {
-  return isNodeRuntime;
 }
 
 function isOkStatus(status: number): status is TypedFetchSuccessStatuses {
@@ -140,48 +132,17 @@ export async function typedFetch<K extends string = string>(
   try {
     const pathname = parsePathname(input);
     if (shouldTrackEndpoint(pathname, config.include, config.exclude)) {
-      const observation: ObservationPayload = {
-        endpointKey,
-        status: response.status,
-        shape,
-        observedAt: new Date().toISOString(),
-        source: isNodeRuntime ? "node" : "browser",
-      };
       const mode = config.observerMode;
-
-      if (mode === "none") {
-        // Explicitly disabled.
-      } else if (mode === "file" || (mode === "auto" && isNodeWritableRuntime())) {
+      if (mode === "file" || (mode === "auto" && isNodeRuntime)) {
         queueRegistryObservation({
           registryPath: config.registryPath,
           observation: {
-            endpointKey: observation.endpointKey,
-            status: observation.status,
-            shape: observation.shape,
-            observedAt: new Date(observation.observedAt),
+            endpointKey,
+            status: response.status,
+            shape,
+            observedAt: new Date(),
             rawPath: config.strictPrivacyMode ? undefined : pathname,
           },
-        });
-      } else if (
-        mode === "localStorage" ||
-        (mode === "auto" && hasLocalStorage())
-      ) {
-        const registry = loadBrowserRegistry(config.browserStorageKey);
-        observeShape({
-          registry,
-          endpointKey: observation.endpointKey,
-          status: observation.status,
-          shape: observation.shape,
-          rawPath: config.strictPrivacyMode ? undefined : pathname,
-        });
-        saveBrowserRegistry(config.browserStorageKey, registry);
-      }
-
-      if (config.syncUrl) {
-        void pushObservation({
-          syncUrl: config.syncUrl,
-          timeoutMs: config.syncTimeoutMs,
-          observation,
         });
       }
     }

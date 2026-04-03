@@ -17,8 +17,6 @@ test("loadConfig sanitizes invalid override values", () => {
     observerMode: "weird",
     strictPrivacyMode: "yes",
     ignoreFieldNames: ["SECRET", 42],
-    syncTimeoutMs: -20,
-    browserStorageKey: "",
   });
 
   assert.equal(config.maxDepth, defaults.maxDepth);
@@ -29,8 +27,6 @@ test("loadConfig sanitizes invalid override values", () => {
   assert.equal(config.observerMode, defaults.observerMode);
   assert.equal(config.strictPrivacyMode, defaults.strictPrivacyMode);
   assert.deepEqual(config.ignoreFieldNames, ["secret"]);
-  assert.equal(config.syncTimeoutMs, defaults.syncTimeoutMs);
-  assert.equal(config.browserStorageKey, defaults.browserStorageKey);
 });
 
 test("loadConfig supports explicit config file paths", () => {

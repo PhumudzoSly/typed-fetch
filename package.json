@@ -1,6 +1,6 @@
 {
   "name": "@phumudzo/typed-fetch",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Privacy-first status-aware typed fetch with type generation from response shapes",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -26,7 +26,6 @@
     "generate": "node dist/cli.js generate",
     "check": "node dist/cli.js check",
     "clean": "node dist/cli.js clean",
-    "listen": "node dist/cli.js listen",
     "test": "npm run build && node --test"
   },
   "repository": {

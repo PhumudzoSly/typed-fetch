@@ -7,7 +7,6 @@ const http = require("node:http");
 
 const { typedFetch } = require("../dist/tFetch");
 const { loadRegistry } = require("../dist/core/registry");
-const { startListener } = require("../dist/listener");
 
 function startServer() {
   const server = http.createServer((req, res) => {
@@ -82,36 +81,3 @@ test("typedFetch captures status-aware shapes and strips ignored field names", a
   }
 });
 
-test("typedFetch pushes observations to sync listener", async () => {
-  const { server, port } = await startServer();
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "typed-fetch-sync-"));
-  const collectorRegistryPath = path.join(tempDir, "collector-registry.json");
-  const collector = await startListener({
-    port: 0,
-    config: { registryPath: collectorRegistryPath },
-  });
-  const baseUrl = `http://127.0.0.1:${port}`;
-  const syncUrl = `http://127.0.0.1:${collector.port}/sync`;
-  const registryPath = path.join(tempDir, "local-registry.json");
-  const generatedPath = path.join(tempDir, "typed-fetch.d.ts");
-
-  try {
-    await typedFetch(`${baseUrl}/users/1`, undefined, {
-      endpointKey: "GET /users/:param",
-      config: {
-        observerMode: "none",
-        syncUrl,
-        registryPath,
-        generatedPath,
-      },
-    });
-
-    // Give async push a brief moment to complete.
-    await new Promise((resolve) => setTimeout(resolve, 60));
-    const registry = loadRegistry(collectorRegistryPath);
-    assert.ok(registry.endpoints["GET /users/:param"]);
-  } finally {
-    await new Promise((resolve) => server.close(resolve));
-    await collector.stop();
-  }
-});
