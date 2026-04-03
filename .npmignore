@@ -1,0 +1,21 @@
+# Source
+src/
+test/
+*.test.js
+
+# Config / tooling
+tsconfig.json
+.gitignore
+.npmignore
+
+# Dev artifacts
+.typed-fetch/
+generated/
+playground-node-server/
+extensions/
+.github/
+
+# Misc
+*.log
+.DS_Store
+Thumbs.db
