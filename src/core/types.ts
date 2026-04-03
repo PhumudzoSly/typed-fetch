@@ -42,6 +42,14 @@ export type TypedFetchConfig = {
   ignoreFieldNames: string[];
   strictPrivacyMode: boolean;
   observerMode: "auto" | "file" | "none";
+  /**
+   * Manual type overrides for specific endpoint+status pairs.
+   * Takes precedence over inferred shapes during generation.
+   *
+   * @example
+   * { "GET /users/:id": { "200": "{ id: number; name: string }" } }
+   */
+  overrides?: Record<string, Record<string, string>>;
 };
 
 export type TypedFetchRequestInit = RequestInit;

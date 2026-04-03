@@ -52,3 +52,41 @@ export {};
 
   assert.equal(result.content, expected);
 });
+
+test("generateTypes applies overrides over inferred shapes", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "typed-fetch-overrides-"));
+  const registryPath = path.join(tempDir, "registry.json");
+  const generatedPath = path.join(tempDir, "typed-fetch.d.ts");
+
+  saveRegistry(registryPath, {
+    version: 2,
+    endpoints: {
+      "GET /users/:id": {
+        responses: {
+          "200": { kind: "object", fields: { id: { shape: { kind: "number" } } } },
+          "404": { kind: "object", fields: { message: { shape: { kind: "string" } } } },
+        },
+        meta: { seenCount: 1, lastSeenAt: "2026-02-01T00:00:00.000Z", observedPaths: [] },
+      },
+    },
+  });
+
+  const result = generateTypes({
+    registryPath,
+    generatedPath,
+    overrides: {
+      // Override inferred 200 shape with a manually defined type.
+      "GET /users/:id": { "200": "{ id: number; name: string; email: string }" },
+      // Override-only endpoint (not in registry).
+      "POST /users": { "201": "{ id: number }" },
+    },
+  });
+
+  assert.ok(result.content.includes('"GET /users/:id"'));
+  assert.ok(result.content.includes("{ id: number; name: string; email: string }"));
+  // 404 still comes from the registry (not overridden)
+  assert.ok(result.content.includes('404: { "message": string; }'));
+  // Override-only endpoint is also included
+  assert.ok(result.content.includes('"POST /users"'));
+  assert.ok(result.content.includes("{ id: number }"));
+});
