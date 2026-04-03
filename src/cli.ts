@@ -4,6 +4,7 @@ import pc from "picocolors";
 import { join } from "path";
 import { loadConfig, getDefaultConfig } from "./core/config";
 import { checkTypes, cleanArtifacts, generateTypes } from "./generator";
+import { loadRegistry, mergeRegistryIntoPath } from "./core/registry";
 
 function readCliVersion(): string {
   try {
@@ -162,6 +163,54 @@ async function run(): Promise<void> {
         return;
       }
       process.stdout.write(`${pc.green("Initialized")} ${result.configPath}\n`);
+    });
+
+  program
+    .command("export")
+    .description("Export the registry as JSON (stdout or --output <path>)")
+    .option("--config <path>", "Path to config file")
+    .option("--output <path>", "Write to a file instead of stdout")
+    .action((options: { config?: string; output?: string }) => {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const fs = require("fs") as typeof import("fs");
+      const config = loadConfig({}, { configPath: options.config });
+      const registry = loadRegistry(config.registryPath);
+      const json = `${JSON.stringify(registry, null, 2)}\n`;
+
+      if (options.output) {
+        fs.writeFileSync(options.output, json, "utf8");
+        const count = Object.keys(registry.endpoints).length;
+        process.stdout.write(
+          `${pc.green("Exported")} ${count} endpoint(s) to ${options.output}\n`
+        );
+      } else {
+        process.stdout.write(json);
+      }
+    });
+
+  program
+    .command("import")
+    .description("Merge a registry JSON file into the local registry")
+    .argument("<file>", "Path to the registry JSON file to import")
+    .option("--config <path>", "Path to config file")
+    .action((file: string, options: { config?: string }) => {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const fs = require("fs") as typeof import("fs");
+      if (!fs.existsSync(file)) {
+        process.stderr.write(`${pc.red("File not found")}: ${file}\n`);
+        process.exit(1);
+      }
+
+      const config = loadConfig({}, { configPath: options.config });
+      const raw = fs.readFileSync(file, "utf8");
+      const incoming = JSON.parse(raw) as import("./core/types").Registry;
+      const incomingCount = Object.keys(incoming.endpoints).length;
+
+      mergeRegistryIntoPath(config.registryPath, incoming);
+
+      process.stdout.write(
+        `${pc.green("Merged")} ${incomingCount} endpoint(s) from ${file} into ${config.registryPath}\n`
+      );
     });
 
   await program.parseAsync(process.argv);

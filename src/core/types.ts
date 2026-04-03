@@ -1,3 +1,9 @@
+/**
+ * A string of the form `"METHOD /path"`, e.g. `"GET /users/:id"`.
+ * Used to type-check `endpointKey` options at the call site.
+ */
+export type EndpointKey = `${string} /${string}`;
+
 export type ShapeNode =
   | { kind: "void" }
   | { kind: "unknown" }
