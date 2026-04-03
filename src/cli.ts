@@ -7,8 +7,10 @@ import { checkTypes, cleanArtifacts, generateTypes } from "./generator";
 import {
   loadRegistry,
   mergeRegistryIntoPath,
+  observeManyToRegistryPath,
   parseRegistryJson,
 } from "./core/registry";
+import type { ShapeNode } from "./core/types";
 
 function readCliVersion(): string {
   try {
@@ -131,10 +133,16 @@ async function run(): Promise<void> {
     .action((options: { config?: string }) => {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const fs = require("fs") as typeof import("fs");
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const http = require("http") as typeof import("http");
       const config = loadConfig({}, { configPath: options.config });
       const registryPath = config.registryPath;
+      const observerPort = config.observerPort;
 
       process.stdout.write(`${pc.cyan("Watching")} ${registryPath}\n`);
+      process.stdout.write(
+        `${pc.cyan("Observer")} listening on http://localhost:${observerPort}\n`,
+      );
       process.stdout.write(pc.dim("  Press Ctrl+C to stop.\n"));
 
       let debounceTimer: NodeJS.Timeout | null = null;
@@ -155,6 +163,11 @@ async function run(): Promise<void> {
         }
       }
 
+      function scheduleRegen(): void {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(regen, 150);
+      }
+
       function startWatcher(): void {
         if (!fs.existsSync(registryPath)) {
           // Registry doesn't exist yet — poll until it appears.
@@ -162,13 +175,65 @@ async function run(): Promise<void> {
           return;
         }
 
-        fs.watch(registryPath, () => {
-          if (debounceTimer) clearTimeout(debounceTimer);
-          debounceTimer = setTimeout(regen, 150);
-        });
+        fs.watch(registryPath, scheduleRegen);
       }
 
       startWatcher();
+
+      // HTTP observer server — receives observations from browser runtimes.
+      const server = http.createServer((req, res) => {
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+        res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+        if (req.method === "OPTIONS") {
+          res.writeHead(204);
+          res.end();
+          return;
+        }
+
+        if (req.method === "POST" && req.url === "/__typed-fetch/observe") {
+          let body = "";
+          req.on("data", (chunk: Buffer) => {
+            body += chunk.toString();
+          });
+          req.on("end", () => {
+            try {
+              const obs = JSON.parse(body) as {
+                endpointKey: string;
+                status: number;
+                shape: ShapeNode;
+                observedAt: string;
+                rawPath?: string;
+              };
+              observeManyToRegistryPath({
+                registryPath,
+                observations: [
+                  {
+                    endpointKey: obs.endpointKey,
+                    status: obs.status,
+                    shape: obs.shape,
+                    observedAt: new Date(obs.observedAt),
+                    rawPath: obs.rawPath,
+                  },
+                ],
+              });
+              scheduleRegen();
+              res.writeHead(204);
+              res.end();
+            } catch {
+              res.writeHead(400);
+              res.end();
+            }
+          });
+          return;
+        }
+
+        res.writeHead(404);
+        res.end();
+      });
+
+      server.listen(observerPort, "127.0.0.1");
     });
 
   program

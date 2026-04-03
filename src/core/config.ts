@@ -11,6 +11,7 @@ const DEFAULT_CONFIG: TypedFetchConfig = {
   ignoreFieldNames: ["password", "token", "secret", "authorization"],
   strictPrivacyMode: true,
   observerMode: "auto",
+  observerPort: 7779,
 };
 
 type ConfigOverrides = Partial<TypedFetchConfig>;
