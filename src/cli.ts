@@ -2,7 +2,7 @@
 import { Command } from "commander";
 import pc from "picocolors";
 import { join } from "path";
-import { getDefaultConfig } from "./core/config";
+import { loadConfig, getDefaultConfig } from "./core/config";
 import { checkTypes, cleanArtifacts, generateTypes } from "./generator";
 
 function readCliVersion(): string {
@@ -102,6 +102,50 @@ async function run(): Promise<void> {
         }
       );
       process.stdout.write(`${pc.green("Clean complete.")}\n`);
+    });
+
+  program
+    .command("watch")
+    .description("Watch registry for changes and regenerate types automatically")
+    .option("--config <path>", "Path to config file")
+    .action((options: { config?: string }) => {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const fs = require("fs") as typeof import("fs");
+      const config = loadConfig({}, { configPath: options.config });
+      const registryPath = config.registryPath;
+
+      process.stdout.write(`${pc.cyan("Watching")} ${registryPath}\n`);
+      process.stdout.write(pc.dim("  Press Ctrl+C to stop.\n"));
+
+      let debounceTimer: NodeJS.Timeout | null = null;
+
+      function regen(): void {
+        try {
+          const result = generateTypes({}, { configPath: options.config });
+          process.stdout.write(`${pc.green("Generated")} ${result.outputPath}\n`);
+          for (const warning of result.warnings) {
+            process.stdout.write(`${pc.yellow("Warning")} ${warning}\n`);
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Unknown error";
+          process.stderr.write(`${pc.red("Generate failed")}: ${message}\n`);
+        }
+      }
+
+      function startWatcher(): void {
+        if (!fs.existsSync(registryPath)) {
+          // Registry doesn't exist yet — poll until it appears.
+          setTimeout(startWatcher, 500);
+          return;
+        }
+
+        fs.watch(registryPath, () => {
+          if (debounceTimer) clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(regen, 150);
+        });
+      }
+
+      startWatcher();
     });
 
   program
