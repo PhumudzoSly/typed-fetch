@@ -23,6 +23,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function isRegistryLike(value: unknown): value is Registry {
+  return (
+    isRecord(value) &&
+    value.version === REGISTRY_VERSION &&
+    isRecord(value.endpoints)
+  );
+}
+
+export function parseRegistryJson(raw: string): Registry | null {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return isRegistryLike(parsed) ? (parsed as Registry) : null;
+  } catch {
+    return null;
+  }
+}
+
 function stableStringify(input: unknown): string {
   const normalize = (value: unknown): unknown => {
     if (value === undefined) {
@@ -38,9 +55,9 @@ function stableStringify(input: unknown): string {
 
     if (value && typeof value === "object") {
       const sorted: Record<string, unknown> = {};
-      for (const [key, item] of Object.entries(value as Record<string, unknown>).sort((a, b) =>
-        a[0].localeCompare(b[0])
-      )) {
+      for (const [key, item] of Object.entries(
+        value as Record<string, unknown>,
+      ).sort((a, b) => a[0].localeCompare(b[0]))) {
         const normalized = normalize(item);
         if (normalized !== undefined) {
           sorted[key] = normalized;
@@ -72,13 +89,15 @@ export function loadRegistry(path: string): Registry {
 
   try {
     const raw = fs.readFileSync(path, "utf8");
-    const parsed = JSON.parse(raw) as unknown;
-    if (!isRecord(parsed) || parsed.version !== REGISTRY_VERSION || !isRecord(parsed.endpoints)) {
+    const parsed = parseRegistryJson(raw);
+    if (!parsed) {
       throw new Error("Invalid registry structure");
     }
-    return parsed as Registry;
+    return parsed;
   } catch {
-    process.emitWarning(`typed-fetch: corrupt or outdated registry at "${path}", resetting.`);
+    process.emitWarning(
+      `typed-fetch: corrupt or outdated registry at "${path}", resetting.`,
+    );
     fs.rmSync(path, { force: true });
     return createEmptyRegistry();
   }
@@ -142,10 +161,7 @@ export function observeShape(args: {
 }
 
 function sleepMs(ms: number): void {
-  const end = Date.now() + ms;
-  while (Date.now() < end) {
-    // Busy wait for short lock-retry windows.
-  }
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
 function withRegistryLock<T>(registryPath: string, fn: () => T): T {
@@ -175,14 +191,15 @@ function withRegistryLock<T>(registryPath: string, fn: () => T): T {
   } finally {
     try {
       fs.closeSync(lockFd);
-    } catch {
-      // best effort
+    } finally {
+      fs.rmSync(lockPath, { force: true });
     }
-    fs.rmSync(lockPath, { force: true });
   }
 }
 
-export function observeShapeToRegistryPath(args: RegistryObservation & { registryPath: string }): void {
+export function observeShapeToRegistryPath(
+  args: RegistryObservation & { registryPath: string },
+): void {
   withRegistryLock(args.registryPath, () => {
     const registry = loadRegistry(args.registryPath);
     observeShape({
@@ -221,7 +238,10 @@ export function observeManyToRegistryPath(args: {
   });
 }
 
-export function mergeRegistryInto(target: Registry, incoming: Registry): Registry {
+export function mergeRegistryInto(
+  target: Registry,
+  incoming: Registry,
+): Registry {
   for (const [endpointKey, endpoint] of Object.entries(incoming.endpoints)) {
     for (const [statusKey, shape] of Object.entries(endpoint.responses)) {
       observeShape({

@@ -4,6 +4,11 @@ import pc from "picocolors";
 import { join } from "path";
 import { loadConfig, getDefaultConfig } from "./core/config";
 import { checkTypes, cleanArtifacts, generateTypes } from "./generator";
+import {
+  loadRegistry,
+  mergeRegistryIntoPath,
+  parseRegistryJson,
+} from "./core/registry";
 
 function readCliVersion(): string {
   try {
@@ -22,7 +27,10 @@ function readCliVersion(): string {
   return "0.0.0";
 }
 
-function initProject(force: boolean, configPath?: string): { configPath: string; created: boolean } {
+function initProject(
+  force: boolean,
+  configPath?: string,
+): { configPath: string; created: boolean } {
   const targetPath = configPath ?? "typed-fetch.config.json";
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const fs = require("fs") as typeof import("fs");
@@ -31,7 +39,11 @@ function initProject(force: boolean, configPath?: string): { configPath: string;
   }
 
   const config = getDefaultConfig();
-  fs.writeFileSync(`${targetPath}`, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  fs.writeFileSync(
+    `${targetPath}`,
+    `${JSON.stringify(config, null, 2)}\n`,
+    "utf8",
+  );
 
   const gitignorePath = ".gitignore";
   const registryIgnoreLine = ".typed-fetch/";
@@ -39,15 +51,15 @@ function initProject(force: boolean, configPath?: string): { configPath: string;
     ? fs.readFileSync(gitignorePath, "utf8")
     : "";
   if (!existingIgnore.split(/\r?\n/).includes(registryIgnoreLine)) {
-    const next = existingIgnore.length > 0 && !existingIgnore.endsWith("\n")
-      ? `${existingIgnore}\n${registryIgnoreLine}\n`
-      : `${existingIgnore}${registryIgnoreLine}\n`;
+    const next =
+      existingIgnore.length > 0 && !existingIgnore.endsWith("\n")
+        ? `${existingIgnore}\n${registryIgnoreLine}\n`
+        : `${existingIgnore}${registryIgnoreLine}\n`;
     fs.writeFileSync(gitignorePath, next, "utf8");
   }
 
   return { configPath: targetPath, created: true };
 }
-
 
 async function run(): Promise<void> {
   const program = new Command();
@@ -79,7 +91,7 @@ async function run(): Promise<void> {
         process.stderr.write(
           `${pc.red("Generated types are stale")}: ${
             result.outputPath
-          }. Run "typed-fetch generate".\n`
+          }. Run "typed-fetch generate".\n`,
         );
         process.exit(1);
       }
@@ -92,21 +104,29 @@ async function run(): Promise<void> {
     .option("--config <path>", "Path to config file")
     .option("--generated", "Remove generated file only")
     .option("--registry", "Remove registry only")
-    .action((options: { config?: string; generated?: boolean; registry?: boolean }) => {
-      cleanArtifacts(
-        {},
-        { configPath: options.config },
-        {
-          generated: Boolean(options.generated),
-          registry: Boolean(options.registry),
-        }
-      );
-      process.stdout.write(`${pc.green("Clean complete.")}\n`);
-    });
+    .action(
+      (options: {
+        config?: string;
+        generated?: boolean;
+        registry?: boolean;
+      }) => {
+        cleanArtifacts(
+          {},
+          { configPath: options.config },
+          {
+            generated: Boolean(options.generated),
+            registry: Boolean(options.registry),
+          },
+        );
+        process.stdout.write(`${pc.green("Clean complete.")}\n`);
+      },
+    );
 
   program
     .command("watch")
-    .description("Watch registry for changes and regenerate types automatically")
+    .description(
+      "Watch registry for changes and regenerate types automatically",
+    )
     .option("--config <path>", "Path to config file")
     .action((options: { config?: string }) => {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -122,12 +142,15 @@ async function run(): Promise<void> {
       function regen(): void {
         try {
           const result = generateTypes({}, { configPath: options.config });
-          process.stdout.write(`${pc.green("Generated")} ${result.outputPath}\n`);
+          process.stdout.write(
+            `${pc.green("Generated")} ${result.outputPath}\n`,
+          );
           for (const warning of result.warnings) {
             process.stdout.write(`${pc.yellow("Warning")} ${warning}\n`);
           }
         } catch (error) {
-          const message = error instanceof Error ? error.message : "Unknown error";
+          const message =
+            error instanceof Error ? error.message : "Unknown error";
           process.stderr.write(`${pc.red("Generate failed")}: ${message}\n`);
         }
       }
@@ -157,11 +180,70 @@ async function run(): Promise<void> {
       const result = initProject(Boolean(options.force), options.config);
       if (!result.created) {
         process.stdout.write(
-          `${pc.yellow("Config exists")}: ${result.configPath}. Use --force to overwrite.\n`
+          `${pc.yellow("Config exists")}: ${result.configPath}. Use --force to overwrite.\n`,
         );
         return;
       }
       process.stdout.write(`${pc.green("Initialized")} ${result.configPath}\n`);
+    });
+
+  program
+    .command("export")
+    .description("Export the registry as JSON (stdout or --output <path>)")
+    .option("--config <path>", "Path to config file")
+    .option("--output <path>", "Write to a file instead of stdout")
+    .action((options: { config?: string; output?: string }) => {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const fs = require("fs") as typeof import("fs");
+      const config = loadConfig({}, { configPath: options.config });
+      const registry = loadRegistry(config.registryPath);
+      const json = `${JSON.stringify(registry, null, 2)}\n`;
+
+      if (options.output) {
+        fs.writeFileSync(options.output, json, "utf8");
+        const count = Object.keys(registry.endpoints).length;
+        process.stdout.write(
+          `${pc.green("Exported")} ${count} endpoint(s) to ${options.output}\n`,
+        );
+      } else {
+        process.stdout.write(json);
+      }
+    });
+
+  program
+    .command("import")
+    .description("Merge a registry JSON file into the local registry")
+    .argument("<file>", "Path to the registry JSON file to import")
+    .option("--config <path>", "Path to config file")
+    .action((file: string, options: { config?: string }) => {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const fs = require("fs") as typeof import("fs");
+      if (!fs.existsSync(file)) {
+        process.stderr.write(`${pc.red("File not found")}: ${file}\n`);
+        process.exit(1);
+      }
+
+      const config = loadConfig({}, { configPath: options.config });
+      const raw = fs.readFileSync(file, "utf8");
+      const incoming = parseRegistryJson(raw);
+      if (!incoming) {
+        process.stderr.write(`${pc.red("Invalid registry file")}: ${file}\n`);
+        process.exit(1);
+      }
+      const incomingCount = Object.keys(incoming.endpoints).length;
+
+      if (incomingCount === 0) {
+        process.stdout.write(
+          `${pc.yellow("Nothing to import")}: ${file} is empty or invalid.\n`,
+        );
+        return;
+      }
+
+      mergeRegistryIntoPath(config.registryPath, incoming);
+
+      process.stdout.write(
+        `${pc.green("Merged")} ${incomingCount} endpoint(s) from ${file} into ${config.registryPath}\n`,
+      );
     });
 
   await program.parseAsync(process.argv);

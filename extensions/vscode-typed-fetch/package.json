@@ -2,7 +2,7 @@
   "name": "typed-fetch-tools",
   "displayName": "Typed Fetch Tools",
   "description": "Generate typed-fetch types, run listeners, and trigger manual generation directly from VS Code.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "phumudzo",
   "license": "UNLICENSED",
   "repository": {
@@ -41,8 +41,7 @@
   "main": "./dist/extension.js",
   "activationEvents": [
     "onCommand:typedFetch.generate",
-    "onCommand:typedFetch.listenerStart",
-    "onCommand:typedFetch.listenerStop",
+    "onCommand:typedFetch.watch",
     "onCommand:typedFetch.runAndGenerate",
     "onLanguage:typescript",
     "onLanguage:javascript"
@@ -59,21 +58,12 @@
         }
       },
       {
-        "command": "typedFetch.listenerStart",
-        "title": "Typed Fetch: Start Listener",
+        "command": "typedFetch.watch",
+        "title": "Typed Fetch: Watch (auto-regenerate)",
         "category": "Typed Fetch",
         "icon": {
           "light": "media/icons/play-light.svg",
           "dark": "media/icons/play-dark.svg"
-        }
-      },
-      {
-        "command": "typedFetch.listenerStop",
-        "title": "Typed Fetch: Stop Listener",
-        "category": "Typed Fetch",
-        "icon": {
-          "light": "media/icons/stop-light.svg",
-          "dark": "media/icons/stop-dark.svg"
         }
       },
       {
@@ -117,11 +107,7 @@
           "when": "true"
         },
         {
-          "command": "typedFetch.listenerStart",
-          "when": "true"
-        },
-        {
-          "command": "typedFetch.listenerStop",
+          "command": "typedFetch.watch",
           "when": "true"
         },
         {
@@ -132,18 +118,7 @@
     },
     "configuration": {
       "title": "Typed Fetch Tools",
-      "properties": {
-        "typedFetchTools.listenPort": {
-          "type": "number",
-          "default": 43111,
-          "description": "Port used when starting typed-fetch listener"
-        },
-        "typedFetchTools.allowNetwork": {
-          "type": "boolean",
-          "default": false,
-          "description": "Pass --allow-network when starting listener"
-        }
-      }
+      "properties": {}
     }
   },
   "scripts": {
