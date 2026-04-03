@@ -39,6 +39,51 @@ function isJsonContentType(contentType: string | null): boolean {
   return Boolean(contentType && contentType.toLowerCase().includes("application/json"));
 }
 
+function emitDevWarning(message: string): void {
+  if (isNodeRuntime && typeof process.emitWarning === "function") {
+    process.emitWarning(message, { code: "TYPED_FETCH_KEY_MISMATCH" });
+  } else if (typeof console !== "undefined") {
+    console.warn(`[typed-fetch] ${message}`);
+  }
+}
+
+function warnIfKeyMismatch(endpointKey: string, method: string, pathname: string): void {
+  const spaceIdx = endpointKey.indexOf(" ");
+  if (spaceIdx === -1) {
+    return; // Key doesn't follow "METHOD /path" format — skip.
+  }
+
+  const keyMethod = endpointKey.slice(0, spaceIdx).toUpperCase();
+  const keyPath = endpointKey.slice(spaceIdx + 1);
+
+  if (keyMethod !== method.toUpperCase()) {
+    emitDevWarning(
+      `endpointKey method "${keyMethod}" does not match request method "${method.toUpperCase()}" (key: "${endpointKey}")`,
+    );
+    return;
+  }
+
+  const keySegments = keyPath.split("/").filter(Boolean);
+  const actualSegments = pathname.split("/").filter(Boolean);
+
+  if (keySegments.length !== actualSegments.length) {
+    emitDevWarning(
+      `endpointKey "${endpointKey}" has ${keySegments.length} path segment(s) but actual path "${pathname}" has ${actualSegments.length}`,
+    );
+    return;
+  }
+
+  for (let i = 0; i < keySegments.length; i++) {
+    const keySeg = keySegments[i];
+    if (!keySeg.startsWith(":") && keySeg !== actualSegments[i]) {
+      emitDevWarning(
+        `endpointKey "${endpointKey}" static segment "${keySeg}" does not match actual path segment "${actualSegments[i]}" (position ${i})`,
+      );
+      return;
+    }
+  }
+}
+
 function isOkStatus(status: number): status is TypedFetchSuccessStatuses {
   return (
     status === 200 ||
@@ -159,6 +204,7 @@ export async function typedFetch<K extends string = string>(
 
   try {
     const pathname = parsePathname(input);
+    warnIfKeyMismatch(endpointKey, method, pathname);
     if (shouldTrackEndpoint(pathname, config.include, config.exclude)) {
       const mode = config.observerMode;
       if (mode === "file" || (mode === "auto" && isNodeRuntime)) {
