@@ -1,10 +1,12 @@
+// @ts-check
 import { typedFetch } from "@phumudzo/typed-fetch";
 
+/** @type {"GET /posts/:id"} */
 const endpointKey = "GET /posts/:id";
 const url = "https://jsonplaceholder.typicode.com/posts/1";
 
 async function main() {
-  const result = await typedFetch(url, { method: "GET" }, { endpointKey });
+  const result = (await typedFetch(url, { method: "GET" }, { endpointKey }));
 
   if (result.error) {
     console.error(`[typed-fetch-test] Network error: ${result.error.message}`);

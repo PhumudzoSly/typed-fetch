@@ -2,6 +2,12 @@
 
 All notable changes to `@phumudzo/typed-fetch` are documented here.
 
+## [0.1.8] — 2026-04-03
+
+### Fixed
+
+- Added `error?: undefined` to known endpoint success result variants so `if (result.error)` and related discriminant checks type-check reliably after generated declaration merging.
+
 ## [0.1.6] — 2026-04-03
 
 ### Fixed

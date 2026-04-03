@@ -6,8 +6,8 @@ settings:
 
 dependencies:
   '@phumudzo/typed-fetch':
-    specifier: ^0.1.6
-    version: 0.1.6
+    specifier: ^0.1.8
+    version: 0.1.8
   fumadocs-core:
     specifier: 16.7.10
     version: 16.7.10(@types/react@19.2.14)(lucide-react@1.7.0)(next@16.2.2)(react-dom@19.2.4)(react@19.2.4)
@@ -825,8 +825,8 @@ packages:
     engines: {node: '>= 20.0.0'}
     dev: false
 
-  /@phumudzo/typed-fetch@0.1.6:
-    resolution: {integrity: sha512-qz0C30B+F/MvN6v06Dc002m6E82CwXKGMB0XVPmBq6bevrfMNzRnVvlePC5tJi+i3cqhGbkNQmvuiWBAzCu79w==}
+  /@phumudzo/typed-fetch@0.1.8:
+    resolution: {integrity: sha512-od5SGcZHgZbKtG3lOlucru1LRdHNRDyJY5sdtb55oj39dTtsaVRa941FHX/gsi/leSCPSvBV3rhUGodTZl4Txg==}
     engines: {node: '>=18'}
     hasBin: true
     dependencies:

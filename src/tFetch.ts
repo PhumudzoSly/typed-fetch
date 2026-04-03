@@ -143,6 +143,7 @@ type KnownEndpointResult<K extends KnownEndpointKey> = {
       : false;
     data: TypedFetchGeneratedResponses[K][S];
     response: Response;
+    error?: undefined;
   };
 }[keyof TypedFetchGeneratedResponses[K]];
 
