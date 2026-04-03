@@ -77,6 +77,16 @@ function renderEndpointResponses(
   return endpointLines.join("\n");
 }
 
+/**
+ * Reads the registry file and writes a TypeScript declaration file
+ * (`typed-fetch.d.ts`) that augments `TypedFetchGeneratedResponses` with
+ * the observed response shapes.
+ *
+ * Call this after {@link flushObservations} to ensure all queued observations
+ * have been written to the registry before generating.
+ *
+ * @returns The output path, generated content, and any collision warnings.
+ */
 export function generateTypes(
   configOverrides: Partial<TypedFetchConfig> = {},
   options: { configPath?: string } = {}

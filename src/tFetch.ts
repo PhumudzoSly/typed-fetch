@@ -120,7 +120,13 @@ type KnownEndpointResult<K extends KnownEndpointKey> = {
   };
 }[keyof TypedFetchGeneratedResponses[K]];
 
-/** Returned when the network request itself fails (DNS, timeout, CORS, etc). */
+/**
+ * Returned when the network request itself fails before an HTTP response
+ * is received — e.g. DNS failure, connection refused, timeout, CORS error.
+ *
+ * Discriminate from a normal result by checking `result.error` or
+ * `result.status === 0`.
+ */
 export type TypedFetchNetworkError<K extends string = string> = {
   endpoint: K;
   /** Always 0 for network errors — no HTTP response was received. */
@@ -150,6 +156,33 @@ type TypedFetchOptions<K extends string> = {
   configPath?: string;
 };
 
+/**
+ * A privacy-first, status-aware typed fetch wrapper.
+ *
+ * Wraps the native `fetch` API and returns a discriminated result object
+ * instead of throwing. JSON response shapes are automatically observed and
+ * recorded to a registry file, from which TypeScript types can be generated
+ * with `generateTypes()` or `typed-fetch generate`.
+ *
+ * @param input   - The URL or Request to fetch (same as `fetch`'s first arg).
+ * @param init    - Optional fetch init options (method, headers, body, etc).
+ * @param options - typed-fetch options. `endpointKey` is required and should
+ *                  match the pattern `"METHOD /path/:param"`.
+ *
+ * @returns A {@link TypedFetchResult} containing `status`, `ok`, `data`, and
+ *          `response`. On network failure, returns a {@link TypedFetchNetworkError}
+ *          with `status: 0` and an `error` field — never throws.
+ *
+ * @example
+ * const result = await typedFetch("/api/users/1", undefined, {
+ *   endpointKey: "GET /api/users/:id",
+ * });
+ * if (result.error) {
+ *   console.error("Network failure:", result.error.message);
+ * } else if (result.ok) {
+ *   console.log(result.data); // typed as the 200 response shape
+ * }
+ */
 export async function typedFetch<K extends string = string>(
   input: RequestInfo | URL,
   init: TypedFetchRequestInit | undefined,
@@ -236,8 +269,9 @@ export async function typedFetch<K extends string = string>(
 }
 
 /**
- * Compatibility export. Existing code importing `tFetch` now receives
- * the typed status-aware helper result model.
+ * Alias for {@link typedFetch}. Provided for shorter import names.
+ *
+ * @see typedFetch
  */
 export function tFetch<K extends string = string>(
   input: RequestInfo | URL,
