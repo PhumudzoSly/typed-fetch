@@ -13,6 +13,10 @@ build/
 
 # Registry and metadata
 .better-api/
+.typed-fetch/
+
+# Claude Code
+.claude/
 
 # IDE
 .vscode/

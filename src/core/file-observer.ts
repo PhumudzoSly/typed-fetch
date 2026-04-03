@@ -74,6 +74,18 @@ export function queueRegistryObservation(args: {
   }
 }
 
+/**
+ * Immediately flushes all pending observations to their registry files.
+ *
+ * Observations are normally batched and written asynchronously (40 ms delay).
+ * Call this before {@link generateTypes} in scripts and tests to ensure the
+ * registry is fully up-to-date before generating types.
+ *
+ * @example
+ * await typedFetch(url, undefined, { endpointKey: "GET /users/:id" });
+ * flushObservations(); // exported as flushObservations from the main package
+ * generateTypes();
+ */
 export function flushAllRegistryObservationQueues(): void {
   for (const registryPath of queueByRegistryPath.keys()) {
     flush(registryPath);

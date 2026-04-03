@@ -41,23 +41,16 @@ export type TypedFetchConfig = {
   maxArraySample: number;
   ignoreFieldNames: string[];
   strictPrivacyMode: boolean;
-  observerMode: "auto" | "file" | "localStorage" | "none";
-  browserStorageKey: string;
-  syncUrl?: string;
-  syncTimeoutMs: number;
+  observerMode: "auto" | "file" | "none";
+  /**
+   * Manual type overrides for specific endpoint+status pairs.
+   * Takes precedence over inferred shapes during generation.
+   *
+   * @example
+   * { "GET /users/:id": { "200": "{ id: number; name: string }" } }
+   */
+  overrides?: Record<string, Record<string, string>>;
 };
-
-export type ObservationPayload = {
-  endpointKey: string;
-  status: number;
-  shape: ShapeNode;
-  observedAt: string;
-  source: "node" | "browser";
-};
-
-export type RegistrySyncPayload =
-  | { type: "observation"; observation: ObservationPayload }
-  | { type: "registry"; registry: Registry };
 
 export type TypedFetchRequestInit = RequestInit;
 

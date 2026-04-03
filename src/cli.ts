@@ -1,12 +1,9 @@
 #!/usr/bin/env node
-import boxen from "boxen";
 import { Command } from "commander";
-import figlet from "figlet";
 import pc from "picocolors";
 import { join } from "path";
-import { getDefaultConfig } from "./core/config";
+import { loadConfig, getDefaultConfig } from "./core/config";
 import { checkTypes, cleanArtifacts, generateTypes } from "./generator";
-import { startListener } from "./listener";
 
 function readCliVersion(): string {
   try {
@@ -51,36 +48,6 @@ function initProject(force: boolean, configPath?: string): { configPath: string;
   return { configPath: targetPath, created: true };
 }
 
-function renderListenBanner(args: {
-  host: string;
-  port: number;
-  allowNetwork: boolean;
-  generateOnSync: boolean;
-}): string {
-  const title = figlet.textSync("typed-fetch", {
-    font: "Standard",
-    horizontalLayout: "default",
-    verticalLayout: "default",
-  });
-
-  const heading = pc.cyan(title);
-  const url = `http://${args.host}:${args.port}/sync`;
-  const details = [
-    `${pc.bold("Mode")}      Listener`,
-    `${pc.bold("Sync URL")}  ${pc.green(url)}`,
-    `${pc.bold("Scope")}     ${
-      args.allowNetwork ? pc.yellow("Network-enabled") : pc.green("Localhost-only")
-    }`,
-    `${pc.bold("Typegen")}   ${
-      args.generateOnSync ? pc.green("Auto-generate on sync") : pc.yellow("Manual generate")
-    }`,
-    `${pc.bold("Health")}    ${pc.green(`http://${args.host}:${args.port}/health`)}`,
-    "",
-    pc.dim("Press Ctrl+C to stop listener."),
-  ].join("\n");
-
-  return `${heading}\n${boxen(details, { padding: 1, borderStyle: "round", borderColor: "cyan" })}`;
-}
 
 async function run(): Promise<void> {
   const program = new Command();
@@ -138,50 +105,48 @@ async function run(): Promise<void> {
     });
 
   program
-    .command("listen")
-    .description("Start sync listener for browser/server observation")
+    .command("watch")
+    .description("Watch registry for changes and regenerate types automatically")
     .option("--config <path>", "Path to config file")
-    .option("--port <number>", "Listener port", "43111")
-    .option("--host <host>", "Listener host", "127.0.0.1")
-    .option("--allow-network", "Allow non-loopback clients")
-    .option("--no-generate", "Disable auto type generation on sync")
-    .action(
-      async (options: {
-        config?: string;
-        port: string;
-        host: string;
-        allowNetwork?: boolean;
-        generate?: boolean;
-      }) => {
-      const port = Number(options.port);
-      if (!Number.isFinite(port) || port < 0 || port > 65535) {
-        process.stderr.write(`${pc.red("Invalid port")} "${options.port}"\n`);
-        process.exit(1);
+    .action((options: { config?: string }) => {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const fs = require("fs") as typeof import("fs");
+      const config = loadConfig({}, { configPath: options.config });
+      const registryPath = config.registryPath;
+
+      process.stdout.write(`${pc.cyan("Watching")} ${registryPath}\n`);
+      process.stdout.write(pc.dim("  Press Ctrl+C to stop.\n"));
+
+      let debounceTimer: NodeJS.Timeout | null = null;
+
+      function regen(): void {
+        try {
+          const result = generateTypes({}, { configPath: options.config });
+          process.stdout.write(`${pc.green("Generated")} ${result.outputPath}\n`);
+          for (const warning of result.warnings) {
+            process.stdout.write(`${pc.yellow("Warning")} ${warning}\n`);
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Unknown error";
+          process.stderr.write(`${pc.red("Generate failed")}: ${message}\n`);
+        }
       }
 
-      try {
-        const listener = await startListener({
-          port,
-          host: options.host,
-          configPath: options.config,
-          allowNetwork: Boolean(options.allowNetwork),
-          generateOnSync: options.generate !== false,
+      function startWatcher(): void {
+        if (!fs.existsSync(registryPath)) {
+          // Registry doesn't exist yet — poll until it appears.
+          setTimeout(startWatcher, 500);
+          return;
+        }
+
+        fs.watch(registryPath, () => {
+          if (debounceTimer) clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(regen, 150);
         });
-        process.stdout.write(
-          `${renderListenBanner({
-            host: options.host,
-            port: listener.port,
-            allowNetwork: Boolean(options.allowNetwork),
-            generateOnSync: options.generate !== false,
-          })}\n`
-        );
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Unknown error";
-        process.stderr.write(`${pc.red("Failed to start listener")}: ${message}\n`);
-        process.exit(1);
       }
-      }
-    );
+
+      startWatcher();
+    });
 
   program
     .command("init")

@@ -1,6 +1,6 @@
 {
   "name": "@phumudzo/typed-fetch",
-  "version": "0.0.2",
+  "version": "0.1.5",
   "description": "Privacy-first status-aware typed fetch with type generation from response shapes",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -26,7 +26,7 @@
     "generate": "node dist/cli.js generate",
     "check": "node dist/cli.js check",
     "clean": "node dist/cli.js clean",
-    "listen": "node dist/cli.js listen",
+    "watch": "node dist/cli.js watch",
     "test": "npm run build && node --test"
   },
   "repository": {
@@ -45,14 +45,13 @@
   "author": "Phumudzo",
   "license": "MIT",
   "dependencies": {
-    "boxen": "^8.0.1",
     "commander": "^14.0.1",
-    "figlet": "^1.8.2",
-    "picocolors": "^1.1.1"
+    "picocolors": "^1.1.1",
+    "picomatch": "^4.0.4"
   },
   "devDependencies": {
-    "@types/figlet": "^1.7.0",
     "@types/node": "^22.13.14",
+    "@types/picomatch": "^4.0.3",
     "typescript": "^5.8.2"
   }
 }

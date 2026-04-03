@@ -7,7 +7,7 @@ const http = require("node:http");
 
 const { typedFetch } = require("../dist/tFetch");
 const { loadRegistry } = require("../dist/core/registry");
-const { startListener } = require("../dist/listener");
+const { flushObservations, generateTypes, checkTypes } = require("../dist/index");
 
 function startServer() {
   const server = http.createServer((req, res) => {
@@ -82,36 +82,48 @@ test("typedFetch captures status-aware shapes and strips ignored field names", a
   }
 });
 
-test("typedFetch pushes observations to sync listener", async () => {
+test("full pipeline: observe → registry → generate → check produces valid .d.ts", async () => {
   const { server, port } = await startServer();
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "typed-fetch-sync-"));
-  const collectorRegistryPath = path.join(tempDir, "collector-registry.json");
-  const collector = await startListener({
-    port: 0,
-    config: { registryPath: collectorRegistryPath },
-  });
-  const baseUrl = `http://127.0.0.1:${port}`;
-  const syncUrl = `http://127.0.0.1:${collector.port}/sync`;
-  const registryPath = path.join(tempDir, "local-registry.json");
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "typed-fetch-pipeline-"));
+  const registryPath = path.join(tempDir, "registry.json");
   const generatedPath = path.join(tempDir, "typed-fetch.d.ts");
+  const baseUrl = `http://127.0.0.1:${port}`;
 
   try {
     await typedFetch(`${baseUrl}/users/1`, undefined, {
       endpointKey: "GET /users/:param",
-      config: {
-        observerMode: "none",
-        syncUrl,
-        registryPath,
-        generatedPath,
-      },
+      config: { registryPath, generatedPath },
     });
 
-    // Give async push a brief moment to complete.
-    await new Promise((resolve) => setTimeout(resolve, 60));
-    const registry = loadRegistry(collectorRegistryPath);
-    assert.ok(registry.endpoints["GET /users/:param"]);
+    flushObservations();
+
+    const result = generateTypes({ registryPath, generatedPath });
+    assert.equal(result.warnings.length, 0);
+    assert.ok(fs.existsSync(generatedPath));
+
+    const dts = fs.readFileSync(generatedPath, "utf8");
+    assert.ok(dts.includes("GET /users/:param"));
+    assert.ok(dts.includes("200:"));
+    assert.ok(dts.includes('"id"'));
+    assert.ok(dts.includes('"name"'));
+
+    const check = checkTypes({ registryPath, generatedPath });
+    assert.equal(check.ok, true);
   } finally {
     await new Promise((resolve) => server.close(resolve));
-    await collector.stop();
   }
 });
+
+test("typedFetch returns TypedFetchNetworkError on connection failure", async () => {
+  const result = await typedFetch("http://127.0.0.1:1", undefined, {
+    endpointKey: "GET /unreachable",
+    config: { observerMode: "none" },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.ok, false);
+  assert.equal(result.data, undefined);
+  assert.equal(result.response, null);
+  assert.ok(result.error instanceof Error);
+});
+

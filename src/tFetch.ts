@@ -1,13 +1,9 @@
 import { queueRegistryObservation } from "./core/file-observer";
 import { loadConfig } from "./core/config";
-import { hasLocalStorage, loadBrowserRegistry, saveBrowserRegistry } from "./core/browser-registry";
 import { shouldTrackEndpoint } from "./core/filter";
 import { normalizeEndpointKey } from "./core/normalize";
-import { observeShape } from "./core/registry";
 import { inferShape } from "./core/shape";
-import { pushObservation } from "./core/sync";
 import type {
-  ObservationPayload,
   ShapeNode,
   TypedFetchConfig,
   TypedFetchRequestInit,
@@ -43,8 +39,49 @@ function isJsonContentType(contentType: string | null): boolean {
   return Boolean(contentType && contentType.toLowerCase().includes("application/json"));
 }
 
-function isNodeWritableRuntime(): boolean {
-  return isNodeRuntime;
+function emitDevWarning(message: string): void {
+  if (isNodeRuntime && typeof process.emitWarning === "function") {
+    process.emitWarning(message, { code: "TYPED_FETCH_KEY_MISMATCH" });
+  } else if (typeof console !== "undefined") {
+    console.warn(`[typed-fetch] ${message}`);
+  }
+}
+
+function warnIfKeyMismatch(endpointKey: string, method: string, pathname: string): void {
+  const spaceIdx = endpointKey.indexOf(" ");
+  if (spaceIdx === -1) {
+    return; // Key doesn't follow "METHOD /path" format — skip.
+  }
+
+  const keyMethod = endpointKey.slice(0, spaceIdx).toUpperCase();
+  const keyPath = endpointKey.slice(spaceIdx + 1);
+
+  if (keyMethod !== method.toUpperCase()) {
+    emitDevWarning(
+      `endpointKey method "${keyMethod}" does not match request method "${method.toUpperCase()}" (key: "${endpointKey}")`,
+    );
+    return;
+  }
+
+  const keySegments = keyPath.split("/").filter(Boolean);
+  const actualSegments = pathname.split("/").filter(Boolean);
+
+  if (keySegments.length !== actualSegments.length) {
+    emitDevWarning(
+      `endpointKey "${endpointKey}" has ${keySegments.length} path segment(s) but actual path "${pathname}" has ${actualSegments.length}`,
+    );
+    return;
+  }
+
+  for (let i = 0; i < keySegments.length; i++) {
+    const keySeg = keySegments[i];
+    if (!keySeg.startsWith(":") && keySeg !== actualSegments[i]) {
+      emitDevWarning(
+        `endpointKey "${endpointKey}" static segment "${keySeg}" does not match actual path segment "${actualSegments[i]}" (position ${i})`,
+      );
+      return;
+    }
+  }
 }
 
 function isOkStatus(status: number): status is TypedFetchSuccessStatuses {
@@ -83,15 +120,35 @@ type KnownEndpointResult<K extends KnownEndpointKey> = {
   };
 }[keyof TypedFetchGeneratedResponses[K]];
 
-export type TypedFetchResult<K extends string = string> = K extends KnownEndpointKey
-  ? KnownEndpointResult<K>
-  : {
-      endpoint: K;
-      status: number;
-      ok: boolean;
-      data: unknown;
-      response: Response;
-    };
+/**
+ * Returned when the network request itself fails before an HTTP response
+ * is received — e.g. DNS failure, connection refused, timeout, CORS error.
+ *
+ * Discriminate from a normal result by checking `result.error` or
+ * `result.status === 0`.
+ */
+export type TypedFetchNetworkError<K extends string = string> = {
+  endpoint: K;
+  /** Always 0 for network errors — no HTTP response was received. */
+  status: 0;
+  ok: false;
+  data: undefined;
+  response: null;
+  error: Error;
+};
+
+export type TypedFetchResult<K extends string = string> =
+  | TypedFetchNetworkError<K>
+  | (K extends KnownEndpointKey
+      ? KnownEndpointResult<K>
+      : {
+          endpoint: K;
+          status: number;
+          ok: boolean;
+          data: unknown;
+          response: Response;
+          error?: undefined;
+        });
 
 type TypedFetchOptions<K extends string> = {
   endpointKey: K;
@@ -99,15 +156,56 @@ type TypedFetchOptions<K extends string> = {
   configPath?: string;
 };
 
+/**
+ * A privacy-first, status-aware typed fetch wrapper.
+ *
+ * Wraps the native `fetch` API and returns a discriminated result object
+ * instead of throwing. JSON response shapes are automatically observed and
+ * recorded to a registry file, from which TypeScript types can be generated
+ * with `generateTypes()` or `typed-fetch generate`.
+ *
+ * @param input   - The URL or Request to fetch (same as `fetch`'s first arg).
+ * @param init    - Optional fetch init options (method, headers, body, etc).
+ * @param options - typed-fetch options. `endpointKey` is required and should
+ *                  match the pattern `"METHOD /path/:param"`.
+ *
+ * @returns A {@link TypedFetchResult} containing `status`, `ok`, `data`, and
+ *          `response`. On network failure, returns a {@link TypedFetchNetworkError}
+ *          with `status: 0` and an `error` field — never throws.
+ *
+ * @example
+ * const result = await typedFetch("/api/users/1", undefined, {
+ *   endpointKey: "GET /api/users/:id",
+ * });
+ * if (result.error) {
+ *   console.error("Network failure:", result.error.message);
+ * } else if (result.ok) {
+ *   console.log(result.data); // typed as the 200 response shape
+ * }
+ */
 export async function typedFetch<K extends string = string>(
   input: RequestInfo | URL,
   init: TypedFetchRequestInit | undefined,
   options: TypedFetchOptions<K>
 ): Promise<TypedFetchResult<K>> {
-  const response = await fetchFunction(input, init);
   const config = loadConfig(options?.config, { configPath: options?.configPath });
-  const method = init?.method ?? "GET";
+
+  let response: Response;
+  try {
+    response = await fetchFunction(input, init);
+  } catch (fetchError) {
+    return {
+      endpoint: options.endpointKey,
+      status: 0,
+      ok: false,
+      data: undefined,
+      response: null,
+      error: fetchError instanceof Error ? fetchError : new Error(String(fetchError)),
+    } as TypedFetchNetworkError<K> as TypedFetchResult<K>;
+  }
+
   const endpointKey = options.endpointKey;
+  const method = init?.method ?? "GET";
 
   if (!endpointKey || typeof endpointKey !== "string") {
     const inferred = normalizeEndpointKey({
@@ -139,49 +237,19 @@ export async function typedFetch<K extends string = string>(
 
   try {
     const pathname = parsePathname(input);
+    warnIfKeyMismatch(endpointKey, method, pathname);
     if (shouldTrackEndpoint(pathname, config.include, config.exclude)) {
-      const observation: ObservationPayload = {
-        endpointKey,
-        status: response.status,
-        shape,
-        observedAt: new Date().toISOString(),
-        source: isNodeRuntime ? "node" : "browser",
-      };
       const mode = config.observerMode;
-
-      if (mode === "none") {
-        // Explicitly disabled.
-      } else if (mode === "file" || (mode === "auto" && isNodeWritableRuntime())) {
+      if (mode === "file" || (mode === "auto" && isNodeRuntime)) {
         queueRegistryObservation({
           registryPath: config.registryPath,
           observation: {
-            endpointKey: observation.endpointKey,
-            status: observation.status,
-            shape: observation.shape,
-            observedAt: new Date(observation.observedAt),
+            endpointKey,
+            status: response.status,
+            shape,
+            observedAt: new Date(),
             rawPath: config.strictPrivacyMode ? undefined : pathname,
           },
-        });
-      } else if (
-        mode === "localStorage" ||
-        (mode === "auto" && hasLocalStorage())
-      ) {
-        const registry = loadBrowserRegistry(config.browserStorageKey);
-        observeShape({
-          registry,
-          endpointKey: observation.endpointKey,
-          status: observation.status,
-          shape: observation.shape,
-          rawPath: config.strictPrivacyMode ? undefined : pathname,
-        });
-        saveBrowserRegistry(config.browserStorageKey, registry);
-      }
-
-      if (config.syncUrl) {
-        void pushObservation({
-          syncUrl: config.syncUrl,
-          timeoutMs: config.syncTimeoutMs,
-          observation,
         });
       }
     }
@@ -201,8 +269,9 @@ export async function typedFetch<K extends string = string>(
 }
 
 /**
- * Compatibility export. Existing code importing `tFetch` now receives
- * the typed status-aware helper result model.
+ * Alias for {@link typedFetch}. Provided for shorter import names.
+ *
+ * @see typedFetch
  */
 export function tFetch<K extends string = string>(
   input: RequestInfo | URL,
