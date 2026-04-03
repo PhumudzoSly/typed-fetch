@@ -7,6 +7,7 @@ const http = require("node:http");
 
 const { typedFetch } = require("../dist/tFetch");
 const { loadRegistry } = require("../dist/core/registry");
+const { flushObservations, generateTypes, checkTypes } = require("../dist/index");
 
 function startServer() {
   const server = http.createServer((req, res) => {
@@ -76,6 +77,38 @@ test("typedFetch captures status-aware shapes and strips ignored field names", a
     assert.ok(fields200.id);
     assert.ok(fields200.name);
     assert.equal(fields200.token, undefined);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("full pipeline: observe → registry → generate → check produces valid .d.ts", async () => {
+  const { server, port } = await startServer();
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "typed-fetch-pipeline-"));
+  const registryPath = path.join(tempDir, "registry.json");
+  const generatedPath = path.join(tempDir, "typed-fetch.d.ts");
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  try {
+    await typedFetch(`${baseUrl}/users/1`, undefined, {
+      endpointKey: "GET /users/:param",
+      config: { registryPath, generatedPath },
+    });
+
+    flushObservations();
+
+    const result = generateTypes({ registryPath, generatedPath });
+    assert.equal(result.warnings.length, 0);
+    assert.ok(fs.existsSync(generatedPath));
+
+    const dts = fs.readFileSync(generatedPath, "utf8");
+    assert.ok(dts.includes("GET /users/:param"));
+    assert.ok(dts.includes("200:"));
+    assert.ok(dts.includes('"id"'));
+    assert.ok(dts.includes('"name"'));
+
+    const check = checkTypes({ registryPath, generatedPath });
+    assert.equal(check.ok, true);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
