@@ -1,6 +1,6 @@
 {
   "name": "@phumudzo/typed-fetch",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Privacy-first status-aware typed fetch with type generation from response shapes",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -45,13 +45,10 @@
   "author": "Phumudzo",
   "license": "MIT",
   "dependencies": {
-    "boxen": "^8.0.1",
     "commander": "^14.0.1",
-    "figlet": "^1.8.2",
     "picocolors": "^1.1.1"
   },
   "devDependencies": {
-    "@types/figlet": "^1.7.0",
     "@types/node": "^22.13.14",
     "typescript": "^5.8.2"
   }

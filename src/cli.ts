@@ -1,7 +1,5 @@
 #!/usr/bin/env node
-import boxen from "boxen";
 import { Command } from "commander";
-import figlet from "figlet";
 import pc from "picocolors";
 import { join } from "path";
 import { getDefaultConfig } from "./core/config";
@@ -57,29 +55,15 @@ function renderListenBanner(args: {
   allowNetwork: boolean;
   generateOnSync: boolean;
 }): string {
-  const title = figlet.textSync("typed-fetch", {
-    font: "Standard",
-    horizontalLayout: "default",
-    verticalLayout: "default",
-  });
-
-  const heading = pc.cyan(title);
   const url = `http://${args.host}:${args.port}/sync`;
-  const details = [
-    `${pc.bold("Mode")}      Listener`,
-    `${pc.bold("Sync URL")}  ${pc.green(url)}`,
-    `${pc.bold("Scope")}     ${
-      args.allowNetwork ? pc.yellow("Network-enabled") : pc.green("Localhost-only")
-    }`,
-    `${pc.bold("Typegen")}   ${
-      args.generateOnSync ? pc.green("Auto-generate on sync") : pc.yellow("Manual generate")
-    }`,
-    `${pc.bold("Health")}    ${pc.green(`http://${args.host}:${args.port}/health`)}`,
-    "",
-    pc.dim("Press Ctrl+C to stop listener."),
+  return [
+    pc.cyan(pc.bold("typed-fetch listener")),
+    `  ${pc.bold("Sync URL")}  ${pc.green(url)}`,
+    `  ${pc.bold("Scope")}     ${args.allowNetwork ? pc.yellow("Network-enabled") : pc.green("Localhost-only")}`,
+    `  ${pc.bold("Typegen")}   ${args.generateOnSync ? pc.green("Auto-generate on sync") : pc.yellow("Manual generate")}`,
+    `  ${pc.bold("Health")}    ${pc.green(`http://${args.host}:${args.port}/health`)}`,
+    pc.dim("  Press Ctrl+C to stop."),
   ].join("\n");
-
-  return `${heading}\n${boxen(details, { padding: 1, borderStyle: "round", borderColor: "cyan" })}`;
 }
 
 async function run(): Promise<void> {
