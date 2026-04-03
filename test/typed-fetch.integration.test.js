@@ -81,3 +81,16 @@ test("typedFetch captures status-aware shapes and strips ignored field names", a
   }
 });
 
+test("typedFetch returns TypedFetchNetworkError on connection failure", async () => {
+  const result = await typedFetch("http://127.0.0.1:1", undefined, {
+    endpointKey: "GET /unreachable",
+    config: { observerMode: "none" },
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.ok, false);
+  assert.equal(result.data, undefined);
+  assert.equal(result.response, null);
+  assert.ok(result.error instanceof Error);
+});
+

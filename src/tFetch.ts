@@ -75,15 +75,29 @@ type KnownEndpointResult<K extends KnownEndpointKey> = {
   };
 }[keyof TypedFetchGeneratedResponses[K]];
 
-export type TypedFetchResult<K extends string = string> = K extends KnownEndpointKey
-  ? KnownEndpointResult<K>
-  : {
-      endpoint: K;
-      status: number;
-      ok: boolean;
-      data: unknown;
-      response: Response;
-    };
+/** Returned when the network request itself fails (DNS, timeout, CORS, etc). */
+export type TypedFetchNetworkError<K extends string = string> = {
+  endpoint: K;
+  /** Always 0 for network errors — no HTTP response was received. */
+  status: 0;
+  ok: false;
+  data: undefined;
+  response: null;
+  error: Error;
+};
+
+export type TypedFetchResult<K extends string = string> =
+  | TypedFetchNetworkError<K>
+  | (K extends KnownEndpointKey
+      ? KnownEndpointResult<K>
+      : {
+          endpoint: K;
+          status: number;
+          ok: boolean;
+          data: unknown;
+          response: Response;
+          error?: undefined;
+        });
 
 type TypedFetchOptions<K extends string> = {
   endpointKey: K;
@@ -96,10 +110,24 @@ export async function typedFetch<K extends string = string>(
   init: TypedFetchRequestInit | undefined,
   options: TypedFetchOptions<K>
 ): Promise<TypedFetchResult<K>> {
-  const response = await fetchFunction(input, init);
   const config = loadConfig(options?.config, { configPath: options?.configPath });
-  const method = init?.method ?? "GET";
+
+  let response: Response;
+  try {
+    response = await fetchFunction(input, init);
+  } catch (fetchError) {
+    return {
+      endpoint: options.endpointKey,
+      status: 0,
+      ok: false,
+      data: undefined,
+      response: null,
+      error: fetchError instanceof Error ? fetchError : new Error(String(fetchError)),
+    } as TypedFetchNetworkError<K> as TypedFetchResult<K>;
+  }
+
   const endpointKey = options.endpointKey;
+  const method = init?.method ?? "GET";
 
   if (!endpointKey || typeof endpointKey !== "string") {
     const inferred = normalizeEndpointKey({
