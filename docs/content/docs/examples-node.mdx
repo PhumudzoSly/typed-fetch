@@ -1,0 +1,365 @@
+---
+title: Node.js Server
+description: Using typed-fetch in Node.js backend applications
+---
+
+# Node.js Server Examples
+
+Real-world examples of using typed-fetch in Node.js servers.
+
+## Basic API Client
+
+```ts
+import { typedFetch } from '@phumudzo/typed-fetch';
+
+export async function getUserFromExternalAPI(userId: number) {
+  const result = await typedFetch(
+    `https://jsonplaceholder.typicode.com/users/${userId}`,
+    { method: 'GET' },
+    { endpointKey: 'GET /users/:id' }
+  );
+
+  if (result.status === 200) {
+    return result.data;
+  }
+
+  throw new Error(`Failed to fetch user: ${result.status}`);
+}
+```
+
+## Express Middleware
+
+```ts
+import express, { Request, Response, NextFunction } from 'express';
+import { typedFetch } from '@phumudzo/typed-fetch';
+
+const app = express();
+
+async function fetchUserData(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  const userId = req.params.userId;
+
+  const result = await typedFetch(
+    `https://api.example.com/user/${userId}`,
+    { method: 'GET' },
+    { endpointKey: 'GET /user/:id' }
+  );
+
+  if (result.status === 200) {
+    req.user = result.data;
+    next();
+  } else if (result.status === 404) {
+    res.status(404).json({ error: 'User not found' });
+  } else if (result.status === 0) {
+    res.status(503).json({ error: 'Service unavailable' });
+  } else {
+    res.status(result.status).json({ error: 'Failed to fetch user' });
+  }
+}
+
+app.get('/profile/:userId', fetchUserData, (req, res) => {
+  res.json(req.user);
+});
+```
+
+## Service Class
+
+```ts
+import { typedFetch } from '@phumudzo/typed-fetch';
+
+export class UserService {
+  private baseUrl = 'https://api.example.com';
+
+  async getUser(id: number) {
+    const result = await typedFetch(
+      `${this.baseUrl}/user/${id}`,
+      { method: 'GET' },
+      { endpointKey: 'GET /user/:id' }
+    );
+
+    if (result.status === 200) {
+      return result.data;
+    } else if (result.status === 404) {
+      throw new Error('User not found');
+    } else {
+      throw new Error(`API error: ${result.status}`);
+    }
+  }
+
+  async createUser(name: string, email: string) {
+    const result = await typedFetch(
+      `${this.baseUrl}/user`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email })
+      },
+      { endpointKey: 'POST /user' }
+    );
+
+    if (result.status === 201) {
+      return result.data;
+    } else if (result.status === 400) {
+      throw new Error(`Validation error: ${result.data?.message}`);
+    } else {
+      throw new Error(`API error: ${result.status}`);
+    }
+  }
+
+  async deleteUser(id: number) {
+    const result = await typedFetch(
+      `${this.baseUrl}/user/${id}`,
+      { method: 'DELETE' },
+      { endpointKey: 'DELETE /user/:id' }
+    );
+
+    if (result.status === 204) {
+      return true;
+    } else if (result.status === 404) {
+      throw new Error('User not found');
+    } else {
+      throw new Error(`API error: ${result.status}`);
+    }
+  }
+}
+
+// Usage:
+const userService = new UserService();
+const user = await userService.getUser(1);
+const newUser = await userService.createUser('John', 'john@example.com');
+```
+
+## Retry Logic
+
+```ts
+import { typedFetch } from '@phumudzo/typed-fetch';
+
+export async function fetchWithRetry<K extends string>(
+  url: string,
+  init: RequestInit = {},
+  options: { endpointKey: K },
+  maxRetries = 3
+) {
+  let lastError;
+
+  for (let i = 0; i < maxRetries; i++) {
+    const result = await typedFetch(url, init, options);
+
+    // Success or client error - don't retry
+    if (result.status !== 0 && result.status < 500) {
+      return result;
+    }
+
+    // Server error or network error - retry
+    lastError = result;
+
+    if (i < maxRetries - 1) {
+      // Exponential backoff
+      const delay = Math.pow(2, i) * 1000;
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  return lastError;
+}
+
+// Usage:
+const result = await fetchWithRetry(
+  '/api/data',
+  { method: 'GET' },
+  { endpointKey: 'GET /data' },
+  3 // max retries
+);
+```
+
+## With Authentication
+
+```ts
+import { typedFetch } from '@phumudzo/typed-fetch';
+
+export class AuthenticatedApiClient {
+  private token: string | null = null;
+
+  setToken(token: string) {
+    this.token = token;
+  }
+
+  private getHeaders() {
+    return {
+      'Content-Type': 'application/json',
+      ...(this.token && { 'Authorization': `Bearer ${this.token}` })
+    };
+  }
+
+  async request<K extends string>(
+    url: string,
+    options: { endpointKey: K },
+    init: RequestInit = {}
+  ) {
+    return typedFetch(url, {
+      ...init,
+      headers: {
+        ...this.getHeaders(),
+        ...init.headers
+      }
+    }, options);
+  }
+
+  async getUser(id: number) {
+    const result = await this.request(
+      `/api/user/${id}`,
+      { endpointKey: 'GET /user/:id' }
+    );
+
+    if (result.status === 401) {
+      throw new Error('Unauthorized - token may be expired');
+    }
+
+    return result;
+  }
+}
+
+// Usage:
+const client = new AuthenticatedApiClient();
+client.setToken('your-token-here');
+const result = await client.getUser(1);
+```
+
+## Error Handler Wrapper
+
+```ts
+import { typedFetch, TypedFetchResult } from '@phumudzo/typed-fetch';
+
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+    public data?: any
+  ) {
+    super(message);
+  }
+}
+
+export async function typedFetchWithErrorHandling<K extends string>(
+  url: string,
+  init: RequestInit = {},
+  options: { endpointKey: K }
+): Promise<any> {
+  const result = await typedFetch(url, init, options);
+
+  if (result.status === 0) {
+    throw new ApiError(0, `Network error: ${result.error?.message}`);
+  }
+
+  if (!result.ok) {
+    throw new ApiError(
+      result.status,
+      `HTTP ${result.status}`,
+      result.data
+    );
+  }
+
+  return result.data;
+}
+
+// Usage:
+try {
+  const user = await typedFetchWithErrorHandling(
+    '/api/user/1',
+    { method: 'GET' },
+    { endpointKey: 'GET /user/:id' }
+  );
+  console.log(user);
+} catch (error) {
+  if (error instanceof ApiError) {
+    console.error(`API Error ${error.status}: ${error.message}`);
+    console.error('Data:', error.data);
+  } else {
+    console.error('Unexpected error:', error);
+  }
+}
+```
+
+## GraphQL Client
+
+```ts
+import { typedFetch } from '@phumudzo/typed-fetch';
+
+export class GraphQLClient {
+  constructor(private baseUrl: string) {}
+
+  async query<K extends string>(
+    query: string,
+    variables?: Record<string, any>
+  ) {
+    const result = await typedFetch(
+      this.baseUrl,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, variables })
+      },
+      { endpointKey: 'POST /graphql' }
+    );
+
+    if (result.status === 200) {
+      if (result.data.errors) {
+        throw new Error(result.data.errors[0].message);
+      }
+      return result.data.data;
+    }
+
+    throw new Error(`GraphQL request failed: ${result.status}`);
+  }
+}
+
+// Usage:
+const client = new GraphQLClient('https://api.example.com/graphql');
+const user = await client.query(`
+  query GetUser($id: ID!) {
+    user(id: $id) {
+      id
+      name
+      email
+    }
+  }
+`, { id: '1' });
+```
+
+## Batch Processing
+
+```ts
+import { typedFetch } from '@phumudzo/typed-fetch';
+
+export async function fetchMultipleUsers(userIds: number[]) {
+  const requests = userIds.map(id =>
+    typedFetch(
+      `/api/user/${id}`,
+      { method: 'GET' },
+      { endpointKey: 'GET /user/:id' }
+    )
+  );
+
+  const results = await Promise.all(requests);
+
+  const users = results
+    .filter(r => r.status === 200)
+    .map(r => r.data);
+
+  const errors = results
+    .filter(r => r.status !== 200)
+    .map(r => ({ status: r.status, endpoint: r.endpoint }));
+
+  return { users, errors };
+}
+
+// Usage:
+const { users, errors } = await fetchMultipleUsers([1, 2, 3]);
+```
+
+## Next: Error Handling Examples
+
+Learn about [Error Handling](/docs/examples-errors).

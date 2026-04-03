@@ -1,0 +1,290 @@
+---
+title: Result Object
+description: Deep dive into the TypedFetchResult object structure
+---
+
+# Result Object
+
+Every call to `typedFetch` returns a `TypedFetchResult` object. This guide explains its structure and usage.
+
+## Structure
+
+```ts
+type TypedFetchResult<K extends string> = {
+  status: number;        // HTTP status or 0 for network errors
+  ok: boolean;           // true if successful (200-208, 226)
+  endpoint: K;           // The endpointKey provided
+  data?: any;            // Parsed response (when available)
+  response?: Response;   // Original Response object
+  error?: Error;         // Network error (when status === 0)
+};
+```
+
+## Properties
+
+### `status`
+
+**Type**: `number`
+
+HTTP response status code, or `0` for network errors.
+
+```ts
+const result = await typedFetch(url, init, { endpointKey });
+
+if (result.status === 200) {
+  // Success
+} else if (result.status === 404) {
+  // Not found
+} else if (result.status === 500) {
+  // Server error
+} else if (result.status === 0) {
+  // Network error
+}
+```
+
+**Common status codes:**
+- `200`: OK
+- `201`: Created
+- `204`: No Content
+- `400`: Bad Request
+- `401`: Unauthorized
+- `403`: Forbidden
+- `404`: Not Found
+- `500`: Internal Server Error
+- `0`: Network error (no response received)
+
+### `ok`
+
+**Type**: `boolean`
+
+Convenience property indicating success. `true` when status is 200-208 or 226.
+
+```ts
+if (result.ok) {
+  // Status is 200-208 or 226
+  console.log(result.data);
+} else {
+  // Status is something else (including 0 for network errors)
+}
+```
+
+This matches the native Fetch API's `response.ok` behavior.
+
+### `endpoint`
+
+**Type**: `string` (the generic K)
+
+The `endpointKey` you provided to the call.
+
+```ts
+const result = await typedFetch(url, init, {
+  endpointKey: 'GET /user/:id'
+});
+
+console.log(result.endpoint);  // "GET /user/:id"
+```
+
+Useful for logging, error reporting, or dynamic handling.
+
+### `data`
+
+**Type**: `any` (typed after `npx typed-fetch generate`)
+
+The parsed JSON response body. Only present when:
+- Request completed (network request succeeded)
+- Response is valid JSON
+- `status !== 0`
+
+```ts
+const result = await typedFetch(url, init, { endpointKey });
+
+// Check if data is available
+if (result.data) {
+  console.log(result.data);
+}
+
+// Or use status narrowing
+if (result.status === 200) {
+  // result.data is available and typed
+  console.log(result.data.name);
+}
+```
+
+**Note**: After running `npx typed-fetch generate`, `data` is fully typed based on the status code.
+
+### `response`
+
+**Type**: `Response | undefined`
+
+The original Fetch API `Response` object. Available when:
+- `status !== 0` (i.e., a response was received)
+
+Use this to access:
+- Response headers
+- Raw text/blob
+- Status text
+- URL information
+
+```ts
+const result = await typedFetch(url, init, { endpointKey });
+
+if (result.response) {
+  const headers = result.response.headers;
+  const contentType = headers.get('content-type');
+  const text = await result.response.text();
+}
+```
+
+### `error`
+
+**Type**: `Error | undefined`
+
+Network error details. Only present when:
+- `status === 0` (network request failed)
+
+```ts
+const result = await typedFetch(url, init, { endpointKey });
+
+if (result.status === 0) {
+  console.error('Network error:', result.error?.message);
+}
+```
+
+## Narrowing by Status
+
+TypeScript allows you to narrow the result type by checking the `status` property:
+
+```ts
+const result = await typedFetch(url, init, { endpointKey });
+
+if (result.status === 200) {
+  // Here, TypeScript knows:
+  // - result.data is of the 200 response type
+  // - result.response is defined
+  // - result.error is undefined
+} else if (result.status === 404) {
+  // Here, TypeScript knows:
+  // - result.data is of the 404 response type
+  // - result.response is defined
+} else if (result.status === 0) {
+  // Here, TypeScript knows:
+  // - result.error is defined
+  // - result.data is undefined
+  // - result.response is undefined
+}
+```
+
+## Never Throws
+
+Unlike the native Fetch API, `typedFetch` **never throws exceptions**. All errors are returned in the result object.
+
+```ts
+try {
+  // This will NOT throw, even on network errors
+  const result = await typedFetch(url, init, { endpointKey });
+
+  if (result.status === 0) {
+    // Handle network error
+    console.error(result.error);
+  } else if (result.ok) {
+    // Handle success
+    console.log(result.data);
+  }
+} catch (e) {
+  // This will never execute
+}
+```
+
+This design philosophy:
+- Eliminates unexpected errors
+- Makes error handling explicit
+- Simplifies error recovery
+- Works well with TypeScript
+
+## Practical Examples
+
+### Extract data with fallback
+
+```ts
+const result = await typedFetch(url, init, { endpointKey });
+
+const data = result.status === 200 ? result.data : null;
+```
+
+### Log all responses
+
+```ts
+const result = await typedFetch(url, init, { endpointKey });
+
+console.log({
+  endpoint: result.endpoint,
+  status: result.status,
+  ok: result.ok,
+  hasError: result.status === 0
+});
+```
+
+### Access response headers
+
+```ts
+const result = await typedFetch(url, init, { endpointKey });
+
+if (result.response) {
+  const retryAfter = result.response.headers.get('Retry-After');
+  const cacheControl = result.response.headers.get('Cache-Control');
+}
+```
+
+### Handle different status codes
+
+```ts
+const result = await typedFetch(url, init, { endpointKey });
+
+switch (result.status) {
+  case 200:
+    console.log('Success:', result.data);
+    break;
+  case 401:
+    console.log('Unauthorized - redirect to login');
+    break;
+  case 404:
+    console.log('Not found:', result.data?.message);
+    break;
+  case 500:
+    console.log('Server error - try again later');
+    break;
+  case 0:
+    console.error('Network error:', result.error?.message);
+    break;
+}
+```
+
+### Type-safe React hook
+
+```tsx
+import { TypedFetchResult } from '@phumudzo/typed-fetch';
+
+export function useApi<K extends string>(
+  url: string,
+  endpointKey: K
+): TypedFetchResult<K> | null {
+  const [result, setResult] = useState<TypedFetchResult<K> | null>(null);
+
+  useEffect(() => {
+    typedFetch(url, { method: 'GET' }, { endpointKey })
+      .then(setResult);
+  }, [url, endpointKey]);
+
+  return result;
+}
+
+// Usage:
+const result = useApi('/api/user', 'GET /user');
+if (result?.status === 200) {
+  console.log(result.data); // Fully typed
+}
+```
+
+## Next: Configuration Schema
+
+Learn about [Configuration Schema](/docs/config-schema).

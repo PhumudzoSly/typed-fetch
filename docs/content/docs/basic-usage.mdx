@@ -1,0 +1,152 @@
+---
+title: Basic Usage
+description: Learn how to use typedFetch to make HTTP requests with automatic typing
+---
+
+# Basic Usage
+
+## The `typedFetch` Function
+
+`typedFetch` is a wrapper around the native `fetch` API that automatically infers and generates TypeScript types for your API responses.
+
+### Simple Request
+
+```ts
+import { typedFetch } from '@phumudzo/typed-fetch';
+
+const result = await typedFetch(
+  'https://api.example.com/user/123',
+  { method: 'GET' },
+  { endpointKey: 'GET /user/:id' }
+);
+```
+
+### Handling Responses
+
+`typedFetch` returns a result object that is never `Promise.rejected`. Instead, it returns discriminated union types based on HTTP status:
+
+```ts
+const result = await typedFetch(
+  'https://api.example.com/user/123',
+  { method: 'GET' },
+  { endpointKey: 'GET /user/:id' }
+);
+
+if (result.status === 200) {
+  // result.data is fully typed here
+  console.log(result.data.name, result.data.email);
+} else if (result.status === 404) {
+  console.error('User not found');
+} else {
+  console.error('Unexpected status:', result.status);
+}
+```
+
+## Result Object Structure
+
+Every call returns a `TypedFetchResult<K>` object with:
+
+- **`status`**: HTTP status code (or `0` for network errors)
+- **`ok`**: boolean indicating success (status 200-208 or 226)
+- **`endpoint`**: The `endpointKey` you provided
+- **`data`**: Parsed JSON response (when available)
+- **`response`**: The original `Response` object
+- **`error`**: Error object (only when `status === 0`)
+
+## Required: The `endpointKey`
+
+The `endpointKey` is a string that uniquely identifies your API endpoint. It follows the pattern:
+
+```
+METHOD /path/:dynamic-segments
+```
+
+Examples:
+- `GET /user/:id`
+- `POST /user`
+- `PATCH /user/:id/profile`
+- `DELETE /comment/:id`
+
+This key enables:
+1. **Type inference**: typed-fetch learns response shapes per endpoint
+2. **Type generation**: Generates TypeScript declarations for each endpoint
+3. **Registry tracking**: Organizes observations by endpoint in `.typed-fetch/registry.json`
+
+## Generating Types
+
+As you use `typedFetch` in your app, responses are observed and recorded. Generate types by running:
+
+```bash
+npx typed-fetch generate
+```
+
+This creates `generated/typed-fetch.d.ts` with TypeScript definitions for all observed endpoints.
+
+### Type-safe with Status Narrowing
+
+```ts
+if (result.status === 200) {
+  // TypeScript knows result.data shape here
+  const user = result.data;
+  console.log(user.name);
+} else {
+  // TypeScript doesn't have result.data here
+}
+```
+
+## Network Errors
+
+Network failures return a result object with `status === 0` and an `error` field:
+
+```ts
+const result = await typedFetch(...);
+
+if (result.status === 0) {
+  // Network error occurred
+  console.error('Network error:', result.error?.message);
+} else if (result.ok) {
+  // Success
+  console.log(result.data);
+}
+```
+
+## Common Patterns
+
+### Data Extraction
+
+```ts
+export async function fetchUser(id: number) {
+  const result = await typedFetch(
+    `/api/user/${id}`,
+    { method: 'GET' },
+    { endpointKey: 'GET /user/:id' }
+  );
+
+  if (result.status === 200) {
+    return result.data;
+  }
+
+  throw new Error(`Failed to fetch user: ${result.status}`);
+}
+```
+
+### Error Handling
+
+```ts
+const result = await typedFetch(url, options, { endpointKey });
+
+if (result.status === 0) {
+  // Network error
+  handleNetworkError(result.error);
+} else if (!result.ok) {
+  // HTTP error
+  handleHTTPError(result.status);
+} else {
+  // Success
+  processData(result.data);
+}
+```
+
+## Next: Configuration
+
+Learn how to customize typed-fetch behavior with [Configuration](/docs/configuration).

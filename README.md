@@ -1,129 +1,118 @@
 # @phumudzo/typed-fetch
 
-Status-aware `fetch` wrapper that learns response shapes and generates TypeScript types from real traffic.
+[![npm version](https://img.shields.io/npm/v/@phumudzo/typed-fetch.svg)](https://www.npmjs.com/package/@phumudzo/typed-fetch)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js 18+](https://img.shields.io/badge/Node.js-18%2B-green)](https://nodejs.org/)
 
-## Install
+**Status-aware `fetch` wrapper that automatically learns API response shapes and generates TypeScript types from real traffic—without storing raw data.**
+
+## ✨ Key Features
+
+- **🔒 Privacy-first**: Only structure is recorded, never raw values
+- **⚡ Zero-config type generation**: Types emerge from real API calls
+- **📊 Status-aware**: Discriminated unions for every HTTP status
+- **🌐 Works everywhere**: Node.js, browsers, mixed architectures
+- **🚀 Never throws**: All errors returned as result objects
+- **📦 Zero-dependencies**: No external dependencies for the core library
+
+## Quick Start
+
+### 1. Install
 
 ```bash
 npm install @phumudzo/typed-fetch
 ```
 
-Node.js `18+` is required.
+Requires Node.js 18+
 
-## VS Code extension
-
-Use **Typed Fetch Tools** in VS Code for in-editor workflows:
-
-- Generate types manually from the Command Palette
-- Start/stop listener without leaving your editor
-- Run current JS/TS file and regenerate types in one step
-- Use inline CodeLens and hover actions on `typedFetch`/`tFetch`
-
-Marketplace: https://marketplace.visualstudio.com/items?itemName=phumudzo.typed-fetch-tools
-
-## Real app workflow
-
-1. Use `typedFetch` in your app code.
-2. Pass a stable `endpointKey` per call.
-3. Run your app/tests to collect response shapes.
-4. Run `typed-fetch generate` to emit declaration types.
-5. Commit generated types so your team gets the same inference.
-
-## Example: API client in your app
+### 2. Use typedFetch
 
 ```ts
-import { typedFetch } from "@phumudzo/typed-fetch";
+import { typedFetch } from '@phumudzo/typed-fetch';
 
-export async function getTodo(todoId: number) {
-  const result = await typedFetch(
-    `https://jsonplaceholder.typicode.com/todos/${todoId}`,
-    { method: "GET" },
-    { endpointKey: "GET /todos/:param" },
-  );
+const result = await typedFetch(
+  'https://api.example.com/user/123',
+  { method: 'GET' },
+  { endpointKey: 'GET /user/:id' }
+);
 
-  if (result.status === 200) {
-    return result.data;
-  }
-
-  throw new Error(`Request failed with status ${result.status}`);
+if (result.status === 200) {
+  console.log(result.data); // typed!
 }
 ```
 
-## Generated typing behavior
-
-After `typed-fetch generate`, your generated file augments:
-
-```ts
-declare module "@phumudzo/typed-fetch" {
-  interface TypedFetchGeneratedResponses {
-    "GET /todos/:param": {
-      200: { id: number; title: string; completed: boolean; userId: number };
-    };
-  }
-}
-```
-
-Then `result.data` is typed when you narrow by `status`.
-
-## Required contract
-
-`endpointKey` is required.  
-Without it, compile-time endpoint typing is not reliable.
-
-## Files created in your project
-
-- `.typed-fetch/registry.json`: captured shape metadata
-- `generated/typed-fetch.d.ts`: generated declaration types
-
-No raw response values are persisted, only structure.
-When `strictPrivacyMode` is enabled (default), raw observed request paths are not stored.
-
-## Use in browser + server apps
-
-For mixed client/server traffic, run the listener in your dev environment:
+### 3. Generate types
 
 ```bash
-typed-fetch listen
+npx typed-fetch generate
 ```
 
-Then set in `typed-fetch.config.json`:
+### 4. Types are now available
 
-```json
-{
-  "syncUrl": "http://127.0.0.1:43111/sync"
-}
+After running your app to collect observations, generated types make `result.data` fully typed by status.
+
+## Why typed-fetch?
+
+- **No manual type definitions** — types emerge from real data
+- **Privacy by default** — only structure recorded, never values
+- **Never throws** — network errors return result objects
+- **TypeScript native** — discriminated unions for status codes
+- **Privacy-conscious** — designed for regulated industries
+
+## Documentation
+
+📖 **[Full Documentation](https://typed-fetch.vercel.app/)** – Complete guides, API reference, and examples
+
+- [Getting Started](https://typed-fetch.vercel.app/docs)
+- [Basic Usage](https://typed-fetch.vercel.app/docs/basic-usage)
+- [Configuration](https://typed-fetch.vercel.app/docs/configuration)
+- [CLI Commands](https://typed-fetch.vercel.app/docs/cli-commands)
+- [React Examples](https://typed-fetch.vercel.app/docs/examples-react)
+- [Node.js Examples](https://typed-fetch.vercel.app/docs/examples-node)
+- [Error Handling](https://typed-fetch.vercel.app/docs/examples-errors)
+- [Privacy & Data](https://typed-fetch.vercel.app/docs/privacy)
+
+## Example Workflow
+
+```bash
+# 1. Initialize your project
+npx typed-fetch init
+
+# 2. Start listening for observations (development)
+npx typed-fetch listen &
+
+# 3. Run your app/tests
+npm run dev
+
+# 4. Generate types from observations
+npx typed-fetch generate
 ```
 
-This lets browser and server observations merge into one registry and auto-generate types while listening.
+## VS Code Extension
 
-## Config (`typed-fetch.config.json`)
+Use **[Typed Fetch Tools](https://marketplace.visualstudio.com/items?itemName=phumudzo.typed-fetch-tools)** for:
+- In-editor type generation
+- Listener control
+- CodeLens on `typedFetch` calls
+- Quick actions and hover info
+
+## Configuration
 
 ```json
 {
   "registryPath": ".typed-fetch/registry.json",
   "generatedPath": "generated/typed-fetch.d.ts",
-  "include": [],
-  "exclude": [],
-  "dynamicSegmentPatterns": ["numeric", "uuid", "hash"],
-  "maxDepth": 8,
-  "maxArraySample": 32,
-  "ignoreFieldNames": ["password", "token", "secret", "authorization"],
   "strictPrivacyMode": true,
-  "observerMode": "auto",
-  "browserStorageKey": "__typed_fetch_registry__",
-  "syncUrl": "http://127.0.0.1:43111/sync",
-  "syncTimeoutMs": 1500
+  "observerMode": "auto"
 }
 ```
 
-## CLI commands
+See the [Configuration Guide](https://typed-fetch.vercel.app/docs/configuration) for all options.
 
-```bash
-typed-fetch init
-typed-fetch generate
-typed-fetch check
-typed-fetch clean
-typed-fetch listen
-```
+## License
 
-All commands accept `--config <path>` for monorepos or custom config locations.
+MIT © Phumudzo
+
+---
+
+**[📖 Read the full documentation](https://typed-fetch.vercel.app/)**

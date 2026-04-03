@@ -1,0 +1,20 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Gradient background -->
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8b5cf6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#6d28d9;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="16" cy="16" r="15" fill="url(#grad)"/>
+  
+  <!-- TypeScript "T" on left side -->
+  <rect x="6" y="8" width="3.5" height="14" fill="white" rx="0.5"/>
+  <rect x="6" y="8" width="7" height="2.5" fill="white" rx="0.5"/>
+  
+  <!-- Arrow/Fetch symbol on right (pointing right) -->
+  <line x1="16.5" y1="16" x2="24.5" y2="16" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+  <polyline points="22,13.5 24.5,16 22,18.5" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

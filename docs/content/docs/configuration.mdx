@@ -1,0 +1,184 @@
+---
+title: Configuration
+description: Configure typed-fetch for your project
+---
+
+# Configuration
+
+Configuration for typed-fetch is defined in `typed-fetch.config.json` at your project root.
+
+## Default Configuration
+
+```json
+{
+  "registryPath": ".typed-fetch/registry.json",
+  "generatedPath": "generated/typed-fetch.d.ts",
+  "include": [],
+  "exclude": [],
+  "dynamicSegmentPatterns": ["numeric", "uuid", "hash"],
+  "maxDepth": 8,
+  "maxArraySample": 32,
+  "ignoreFieldNames": ["password", "token", "secret", "authorization"],
+  "strictPrivacyMode": true,
+  "observerMode": "auto",
+  "browserStorageKey": "__typed_fetch_registry__",
+  "syncUrl": "http://127.0.0.1:43111/sync",
+  "syncTimeoutMs": 1500
+}
+```
+
+## Options
+
+### `registryPath`
+
+**Type**: `string`  
+**Default**: `.typed-fetch/registry.json`
+
+Path where response shape observations are stored. This file tracks all observed endpoints and their response structures.
+
+### `generatedPath`
+
+**Type**: `string`  
+**Default**: `generated/typed-fetch.d.ts`
+
+Output path for generated TypeScript type definitions. This is a relative path from your project root.
+
+### `include`
+
+**Type**: `string[]`  
+**Default**: `[]`
+
+Glob patterns to include for observation. If empty, all endpoints are included. Example:
+
+```json
+{
+  "include": ["**/api/**", "**/graphql/**"]
+}
+```
+
+### `exclude`
+
+**Type**: `string[]`  
+**Default**: `[]`
+
+Glob patterns to exclude from observation. Example:
+
+```json
+{
+  "exclude": ["**/health/**", "**/metrics/**"]
+}
+```
+
+### `dynamicSegmentPatterns`
+
+**Type**: `string[]`  
+**Default**: `["numeric", "uuid", "hash"]`
+
+Patterns used to automatically normalize dynamic segments in URLs. Supported patterns:
+- `numeric`: Matches numeric IDs (e.g., `/user/123` → `/user/:id`)
+- `uuid`: Matches UUID patterns
+- `hash`: Matches hash-like strings
+
+### `maxDepth`
+
+**Type**: `number`  
+**Default**: `8`
+
+Maximum depth when inferring nested object structures. Prevents deeply nested types from becoming unwieldy.
+
+### `maxArraySample`
+
+**Type**: `number`  
+**Default**: `32`
+
+Maximum number of array items to sample when inferring array element types. Prevents sampling very large arrays.
+
+### `ignoreFieldNames`
+
+**Type**: `string[]`  
+**Default**: `["password", "token", "secret", "authorization"]`
+
+Field names that should be ignored when observing responses. Useful for privacy—these fields are not analyzed or tracked.
+
+### `strictPrivacyMode`
+
+**Type**: `boolean`  
+**Default**: `true`
+
+When enabled (default), raw observed request paths are not stored in the registry—only the structure is recorded. This protects against leaking sensitive URL patterns.
+
+### `observerMode`
+
+**Type**: `"auto" | "file" | "none"`  
+**Default**: `"auto"`
+
+Controls where observations are recorded:
+- `"auto"`: Node.js uses file-based registry; browsers use localStorage
+- `"file"`: Always use file-based registry (Node.js only)
+- `"none"`: Disable observation entirely
+
+### `browserStorageKey`
+
+**Type**: `string`  
+**Default**: `"__typed_fetch_registry__"`
+
+Key used for storing observations in browser localStorage.
+
+### `syncUrl`
+
+**Type**: `string`  
+**Default**: `"http://127.0.0.1:43111/sync"`
+
+When using `typed-fetch listen`, this URL is where browser observations are synced. Used in development to merge browser and server observations.
+
+### `syncTimeoutMs`
+
+**Type**: `number`  
+**Default**: `1500`
+
+Timeout (in milliseconds) for syncing observations to the listener server.
+
+## Using Custom Config Path
+
+All CLI commands accept a `--config` flag for custom config locations:
+
+```bash
+npx typed-fetch generate --config ./config/typed-fetch.json
+```
+
+This is useful for monorepos or when you need multiple configurations.
+
+## Example: Monorepo Setup
+
+```json
+{
+  "registryPath": "./api/.typed-fetch/registry.json",
+  "generatedPath": "./api/generated/types.d.ts",
+  "include": ["**/api/**"],
+  "exclude": ["**/test/**", "**/node_modules/**"]
+}
+```
+
+## Example: Privacy-First Production Setup
+
+```json
+{
+  "registryPath": "./.typed-fetch/registry.json",
+  "generatedPath": "./generated/typed-fetch.d.ts",
+  "strictPrivacyMode": true,
+  "observerMode": "file",
+  "ignoreFieldNames": [
+    "password",
+    "token",
+    "secret",
+    "authorization",
+    "creditCard",
+    "ssn",
+    "apiKey"
+  ]
+}
+```
+
+## Next: CLI Commands
+
+Learn about available [CLI Commands](/docs/cli-commands).
