@@ -16,10 +16,21 @@ Initialize a new typed-fetch configuration in your project.
 npx typed-fetch init
 ```
 
-Creates `typed-fetch.config.json` with sensible defaults. Use this when setting up a new project or workspace.
+Creates `typed-fetch.config.json` with values tailored to your project. The command reads your tsconfig chain — handling `references`, `extends`, and `tsconfig.app.json` — and auto-detects the correct `generatedPath` so generated types land where TypeScript is already looking.
+
+**Example output:**
+```
+Initialized typed-fetch.config.json
+Detected tsconfig.app.json → generatedPath: src/generated/typed-fetch.d.ts
+```
+
+If no tsconfig is found it falls back to `src/generated/typed-fetch.d.ts` and warns you to verify the path is within your tsconfig `include`.
+
+Also adds `.typed-fetch/` to `.gitignore` automatically.
 
 **Options**:
-- `--config <path>`: Use a custom config file path
+- `--config <path>`: Write config to a custom path
+- `--force`: Overwrite an existing config file
 
 ## generate
 
@@ -29,7 +40,7 @@ Generate TypeScript type definitions from the registry.
 npx typed-fetch generate
 ```
 
-Reads the registry (`.typed-fetch/registry.json`) and emits TypeScript declarations to the path specified in config (`generated/typed-fetch.d.ts` by default).
+Reads the registry (`.typed-fetch/registry.json`) and emits TypeScript declarations to the path specified in config (`src/generated/typed-fetch.d.ts` by default).
 
 This command:
 - Analyzes all observed response shapes
@@ -40,7 +51,7 @@ This command:
 **Options**:
 - `--config <path>`: Use a custom config file path
 
-**Example output** (`generated/typed-fetch.d.ts`):
+**Example output** (`src/generated/typed-fetch.d.ts`):
 
 ```ts
 declare module '@phumudzo/typed-fetch' {
@@ -99,6 +110,7 @@ Removes:
 
 **Options**:
 - `--registry`: Also remove the registry file (`.typed-fetch/registry.json`)
+- `--generated`: Remove the generated declaration file only
 - `--config <path>`: Use a custom config file path
 
 **Example**: Clean everything including observations
@@ -109,52 +121,59 @@ npx typed-fetch clean --registry
 
 ## watch
 
-Watch for changes and automatically generate types.
+Watch for registry changes and automatically regenerate types. Also starts a local HTTP server that receives observations from browser runtimes.
 
 ```bash
 npx typed-fetch watch
 ```
 
-Continuously monitors the registry file. When changes are detected:
-- Automatically regenerates TypeScript declarations
-- Useful during development to keep types in sync with observations
-- Watches both file system and config changes
+When running, `watch` does two things simultaneously:
 
-Press `Ctrl+C` to stop watching.
+1. **File watcher** — monitors the registry file and regenerates `typed-fetch.d.ts` whenever it changes
+2. **HTTP observer server** — listens on `http://localhost:7779` (configurable via `observerPort`) and accepts `POST /__typed-fetch/observe` requests from browser runtimes
+
+This means a single `typed-fetch watch` process handles type generation for **both Node.js and browser** API calls — no separate setup needed for any framework (Vite, CRA, Next.js, etc.).
+
+**Example output:**
+```
+Watching .typed-fetch/registry.json
+Observer listening on http://localhost:7779
+  Press Ctrl+C to stop.
+Generated src/generated/typed-fetch.d.ts
+```
+
+Press `Ctrl+C` to stop.
 
 **Options**:
 - `--config <path>`: Use a custom config file path
 
-## listen
+## export
 
-Start a sync server for browser observations (development only).
+Export the registry as JSON.
 
 ```bash
-npx typed-fetch listen
+npx typed-fetch export
+npx typed-fetch export --output registry-backup.json
 ```
 
-Starts a lightweight HTTP server at `http://127.0.0.1:43111` (by default) that:
-- Receives observations from browser clients
-- Merges them into the main registry
-- Enables mixed client/server type observation
+Outputs the registry to stdout or a file. Useful for sharing observed shapes across environments.
 
-Use this when developing applications with both browser and server-side API calls.
+**Options**:
+- `--output <path>`: Write to a file instead of stdout
+- `--config <path>`: Use a custom config file path
 
-**Configuration**: Update `syncUrl` in `typed-fetch.config.json`:
+## import
 
-```json
-{
-  "syncUrl": "http://127.0.0.1:43111/sync"
-}
+Merge a registry JSON file into the local registry.
+
+```bash
+npx typed-fetch import registry-backup.json
 ```
 
-The browser will then send observations to this URL automatically.
+Merges shapes from an external registry file into your local registry without overwriting existing observations.
 
-**Typical workflow**:
-1. Terminal 1: `npx typed-fetch listen` (runs in background)
-2. Terminal 2: `npm run dev` (your app)
-3. Browser: Navigate and use app
-4. Terminal 2: `npx typed-fetch generate` (when done)
+**Options**:
+- `--config <path>`: Use a custom config file path
 
 ---
 
@@ -176,21 +195,20 @@ npx typed-fetch watch --config ./monorepo/config.json
 ## Typical Development Workflow
 
 ```bash
-# 1. Initialize project
+# 1. Initialize project (auto-detects generatedPath from tsconfig)
 npx typed-fetch init
 
-# 2. Start listening for observations (keep running)
-npx typed-fetch listen &
-
-# 3. Run your app/tests
-npm run dev
-# Use your app, make API calls
-
-# 4. Generate types when done
-npx typed-fetch generate
-
-# 5. (Optional) Keep watching for changes
+# 2. Start watch — handles both file and browser observations (keep running)
 npx typed-fetch watch
+
+# 3. Run your app in another terminal
+npm run dev
+
+# 4. Use your app / click buttons / make API calls
+# Types are regenerated automatically as observations come in
+
+# 5. (Optional) Generate manually when needed
+npx typed-fetch generate
 ```
 
 ## CI/CD Integration
