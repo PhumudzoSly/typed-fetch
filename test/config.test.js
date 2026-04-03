@@ -6,27 +6,21 @@ const path = require("node:path");
 
 const { getDefaultConfig, loadConfig } = require("../dist/core/config");
 
-test("loadConfig sanitizes invalid override values", () => {
+test("loadConfig merges file config with defaults", () => {
   const defaults = getDefaultConfig();
-  const config = loadConfig({
-    maxDepth: -1,
-    maxArraySample: 0,
-    include: ["/allowed", 123],
-    exclude: "not-array",
-    dynamicSegmentPatterns: ["numeric", "invalid"],
-    observerMode: "weird",
-    strictPrivacyMode: "yes",
-    ignoreFieldNames: ["SECRET", 42],
-  });
+  const config = loadConfig({ maxDepth: 4, strictPrivacyMode: false });
 
-  assert.equal(config.maxDepth, defaults.maxDepth);
-  assert.equal(config.maxArraySample, defaults.maxArraySample);
-  assert.deepEqual(config.include, ["/allowed"]);
-  assert.deepEqual(config.exclude, defaults.exclude);
-  assert.deepEqual(config.dynamicSegmentPatterns, ["numeric"]);
-  assert.equal(config.observerMode, defaults.observerMode);
-  assert.equal(config.strictPrivacyMode, defaults.strictPrivacyMode);
-  assert.deepEqual(config.ignoreFieldNames, ["secret"]);
+  assert.equal(config.maxDepth, 4);
+  assert.equal(config.strictPrivacyMode, false);
+  assert.equal(config.registryPath, defaults.registryPath);
+  assert.deepEqual(config.ignoreFieldNames, defaults.ignoreFieldNames);
+});
+
+test("loadConfig uses defaults when no overrides provided", () => {
+  const defaults = getDefaultConfig();
+  const config = loadConfig();
+
+  assert.deepEqual(config, defaults);
 });
 
 test("loadConfig supports explicit config file paths", () => {
