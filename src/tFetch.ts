@@ -4,6 +4,7 @@ import { shouldTrackEndpoint } from "./core/filter";
 import { normalizeEndpointKey } from "./core/normalize";
 import { inferShape } from "./core/shape";
 import type {
+  EndpointKey,
   ShapeNode,
   TypedFetchConfig,
   TypedFetchRequestInit,
@@ -127,7 +128,7 @@ type KnownEndpointResult<K extends KnownEndpointKey> = {
  * Discriminate from a normal result by checking `result.error` or
  * `result.status === 0`.
  */
-export type TypedFetchNetworkError<K extends string = string> = {
+export type TypedFetchNetworkError<K extends EndpointKey = EndpointKey> = {
   endpoint: K;
   /** Always 0 for network errors — no HTTP response was received. */
   status: 0;
@@ -137,7 +138,7 @@ export type TypedFetchNetworkError<K extends string = string> = {
   error: Error;
 };
 
-export type TypedFetchResult<K extends string = string> =
+export type TypedFetchResult<K extends EndpointKey = EndpointKey> =
   | TypedFetchNetworkError<K>
   | (K extends KnownEndpointKey
       ? KnownEndpointResult<K>
@@ -150,7 +151,7 @@ export type TypedFetchResult<K extends string = string> =
           error?: undefined;
         });
 
-type TypedFetchOptions<K extends string> = {
+type TypedFetchOptions<K extends EndpointKey> = {
   endpointKey: K;
   config?: Partial<TypedFetchConfig>;
   configPath?: string;
@@ -183,7 +184,7 @@ type TypedFetchOptions<K extends string> = {
  *   console.log(result.data); // typed as the 200 response shape
  * }
  */
-export async function typedFetch<K extends string = string>(
+export async function typedFetch<K extends EndpointKey = EndpointKey>(
   input: RequestInfo | URL,
   init: TypedFetchRequestInit | undefined,
   options: TypedFetchOptions<K>
@@ -273,7 +274,7 @@ export async function typedFetch<K extends string = string>(
  *
  * @see typedFetch
  */
-export function tFetch<K extends string = string>(
+export function tFetch<K extends EndpointKey = EndpointKey>(
   input: RequestInfo | URL,
   init: TypedFetchRequestInit | undefined,
   options: TypedFetchOptions<K>
