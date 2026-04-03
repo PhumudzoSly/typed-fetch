@@ -19,10 +19,22 @@ Open http://localhost:3000.
 pnpm dev
 pnpm build
 pnpm start
+pnpm test:typed-fetch
+pnpm test:safe
 pnpm types:check
 pnpm lint
 pnpm format
 ```
+
+## Safe package verification
+
+When you add or update `@phumudzo/typed-fetch`, use this before deploying docs:
+
+```bash
+pnpm test:safe
+```
+
+This runs a lightweight runtime package smoke test and then verifies docs still compile (`types:check` + `build`) without changing production docs behavior.
 
 ## Project Structure
 
