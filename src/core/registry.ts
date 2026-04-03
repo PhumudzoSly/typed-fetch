@@ -23,131 +23,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function parseShapeNode(value: unknown, depth = 0): ShapeNode | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-  if (depth > 64) {
-    return { kind: "unknown" };
-  }
-
-  const kind = value.kind;
-  if (kind === "void" || kind === "unknown" || kind === "null" || kind === "boolean" || kind === "number" || kind === "string") {
-    return { kind };
-  }
-
-  if (kind === "array") {
-    const itemShape = parseShapeNode(value.items, depth + 1);
-    return itemShape ? { kind: "array", items: itemShape } : { kind: "array", items: { kind: "unknown" } };
-  }
-
-  if (kind === "object") {
-    const fieldsInput = isRecord(value.fields) ? value.fields : {};
-    const fields: Record<string, { shape: ShapeNode; optional?: boolean; nullable?: boolean }> = {};
-    for (const [fieldName, fieldValue] of Object.entries(fieldsInput)) {
-      if (!isRecord(fieldValue)) {
-        continue;
-      }
-      const shape = parseShapeNode(fieldValue.shape, depth + 1);
-      if (!shape) {
-        continue;
-      }
-      fields[fieldName] = {
-        shape,
-        optional: fieldValue.optional === true || undefined,
-        nullable: fieldValue.nullable === true || undefined,
-      };
-    }
-    return { kind: "object", fields };
-  }
-
-  if (kind === "union") {
-    if (!Array.isArray(value.variants)) {
-      return { kind: "unknown" };
-    }
-    const variants = value.variants
-      .map((variant) => parseShapeNode(variant, depth + 1))
-      .filter((variant): variant is ShapeNode => variant !== null);
-    if (variants.length === 0) {
-      return { kind: "unknown" };
-    }
-    return { kind: "union", variants };
-  }
-
-  return null;
-}
-
-function sanitizeObservedPaths(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  const unique = new Set<string>();
-  for (const entry of value) {
-    if (typeof entry === "string" && entry.length > 0) {
-      unique.add(entry);
-    }
-  }
-  return Array.from(unique).slice(0, 20);
-}
-
-export function coerceRegistry(value: unknown): Registry {
-  if (!isRecord(value)) {
-    return createEmptyRegistry();
-  }
-
-  const parsedVersion = Number(value.version);
-  if (!Number.isFinite(parsedVersion) || parsedVersion <= 0 || parsedVersion > REGISTRY_VERSION) {
-    return createEmptyRegistry();
-  }
-
-  const endpointsValue = isRecord(value.endpoints) ? value.endpoints : null;
-  if (!endpointsValue) {
-    return createEmptyRegistry();
-  }
-
-  const endpoints: Registry["endpoints"] = {};
-  for (const [endpointKey, endpointValue] of Object.entries(endpointsValue)) {
-    if (!isRecord(endpointValue)) {
-      continue;
-    }
-
-    const responsesInput = isRecord(endpointValue.responses) ? endpointValue.responses : {};
-    const responses: Record<string, ShapeNode> = {};
-    for (const [statusKey, shapeValue] of Object.entries(responsesInput)) {
-      const shape = parseShapeNode(shapeValue);
-      if (!shape) {
-        continue;
-      }
-      responses[statusKey] = serializeShape(shape);
-    }
-
-    if (Object.keys(responses).length === 0) {
-      continue;
-    }
-
-    const metaInput = isRecord(endpointValue.meta) ? endpointValue.meta : {};
-    const seenCount = Number(metaInput.seenCount);
-    const lastSeenAt =
-      typeof metaInput.lastSeenAt === "string" && !Number.isNaN(Date.parse(metaInput.lastSeenAt))
-        ? metaInput.lastSeenAt
-        : new Date(0).toISOString();
-
-    endpoints[endpointKey] = {
-      responses,
-      meta: {
-        seenCount: Number.isFinite(seenCount) && seenCount >= 0 ? seenCount : 0,
-        lastSeenAt,
-        observedPaths: sanitizeObservedPaths(metaInput.observedPaths),
-      },
-    };
-  }
-
-  return {
-    version: REGISTRY_VERSION,
-    endpoints,
-  };
-}
-
 function stableStringify(input: unknown): string {
   const normalize = (value: unknown): unknown => {
     if (value === undefined) {
@@ -188,14 +63,6 @@ function ensureDir(path: string): void {
   }
 }
 
-function backupCorruptRegistry(path: string): void {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const fs = require("fs") as typeof import("fs");
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const backupPath = `${path}.invalid-${timestamp}.bak`;
-  fs.renameSync(path, backupPath);
-}
-
 export function loadRegistry(path: string): Registry {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const fs = require("fs") as typeof import("fs");
@@ -205,9 +72,14 @@ export function loadRegistry(path: string): Registry {
 
   try {
     const raw = fs.readFileSync(path, "utf8");
-    return coerceRegistry(JSON.parse(raw));
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isRecord(parsed) || parsed.version !== REGISTRY_VERSION || !isRecord(parsed.endpoints)) {
+      throw new Error("Invalid registry structure");
+    }
+    return parsed as Registry;
   } catch {
-    backupCorruptRegistry(path);
+    process.emitWarning(`typed-fetch: corrupt or outdated registry at "${path}", resetting.`);
+    fs.rmSync(path, { force: true });
     return createEmptyRegistry();
   }
 }
