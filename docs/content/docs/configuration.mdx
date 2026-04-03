@@ -13,7 +13,7 @@ Configuration for typed-fetch is defined in `typed-fetch.config.json` at your pr
 ```json
 {
   "registryPath": ".typed-fetch/registry.json",
-  "generatedPath": "generated/typed-fetch.d.ts",
+  "generatedPath": "src/generated/typed-fetch.d.ts",
   "include": [],
   "exclude": [],
   "dynamicSegmentPatterns": ["numeric", "uuid", "hash"],
@@ -22,9 +22,7 @@ Configuration for typed-fetch is defined in `typed-fetch.config.json` at your pr
   "ignoreFieldNames": ["password", "token", "secret", "authorization"],
   "strictPrivacyMode": true,
   "observerMode": "auto",
-  "browserStorageKey": "__typed_fetch_registry__",
-  "syncUrl": "http://127.0.0.1:43111/sync",
-  "syncTimeoutMs": 1500
+  "observerPort": 7779
 }
 ```
 
@@ -40,9 +38,9 @@ Path where response shape observations are stored. This file tracks all observed
 ### `generatedPath`
 
 **Type**: `string`  
-**Default**: `generated/typed-fetch.d.ts`
+**Default**: `src/generated/typed-fetch.d.ts`
 
-Output path for generated TypeScript type definitions. This is a relative path from your project root.
+Output path for generated TypeScript type definitions. Must be within a directory covered by your tsconfig `include` paths — running `typed-fetch init` auto-detects the correct path for your project.
 
 ### `include`
 
@@ -99,45 +97,32 @@ Maximum number of array items to sample when inferring array element types. Prev
 **Type**: `string[]`  
 **Default**: `["password", "token", "secret", "authorization"]`
 
-Field names that should be ignored when observing responses. Useful for privacy—these fields are not analyzed or tracked.
+Field names that should be ignored when observing responses. Useful for privacy — these fields are not analyzed or tracked.
 
 ### `strictPrivacyMode`
 
 **Type**: `boolean`  
 **Default**: `true`
 
-When enabled (default), raw observed request paths are not stored in the registry—only the structure is recorded. This protects against leaking sensitive URL patterns.
+When enabled (default), raw observed request paths are not stored in the registry — only the structure is recorded. This protects against leaking sensitive URL patterns.
 
 ### `observerMode`
 
-**Type**: `"auto" | "file" | "none"`  
+**Type**: `"auto" | "file" | "http" | "none"`  
 **Default**: `"auto"`
 
-Controls where observations are recorded:
-- `"auto"`: Node.js uses file-based registry; browsers use localStorage
-- `"file"`: Always use file-based registry (Node.js only)
-- `"none"`: Disable observation entirely
+Controls how observations are recorded:
+- `"auto"`: Node.js writes directly to the registry file; browsers POST to the local observer server
+- `"file"`: Always write to file (Node.js only)
+- `"http"`: Always POST to the observer server (explicit browser mode)
+- `"none"`: Disable observation entirely (use in production)
 
-### `browserStorageKey`
-
-**Type**: `string`  
-**Default**: `"__typed_fetch_registry__"`
-
-Key used for storing observations in browser localStorage.
-
-### `syncUrl`
-
-**Type**: `string`  
-**Default**: `"http://127.0.0.1:43111/sync"`
-
-When using `typed-fetch listen`, this URL is where browser observations are synced. Used in development to merge browser and server observations.
-
-### `syncTimeoutMs`
+### `observerPort`
 
 **Type**: `number`  
-**Default**: `1500`
+**Default**: `7779`
 
-Timeout (in milliseconds) for syncing observations to the listener server.
+Port for the local HTTP observer server started by `typed-fetch watch`. Browser runtimes post observations here when `observerMode` is `"auto"` or `"http"`. Change this if port 7779 is already in use on your machine.
 
 ## Using Custom Config Path
 
@@ -154,7 +139,7 @@ This is useful for monorepos or when you need multiple configurations.
 ```json
 {
   "registryPath": "./api/.typed-fetch/registry.json",
-  "generatedPath": "./api/generated/types.d.ts",
+  "generatedPath": "./api/src/generated/types.d.ts",
   "include": ["**/api/**"],
   "exclude": ["**/test/**", "**/node_modules/**"]
 }
@@ -165,9 +150,9 @@ This is useful for monorepos or when you need multiple configurations.
 ```json
 {
   "registryPath": "./.typed-fetch/registry.json",
-  "generatedPath": "./generated/typed-fetch.d.ts",
+  "generatedPath": "./src/generated/typed-fetch.d.ts",
   "strictPrivacyMode": true,
-  "observerMode": "file",
+  "observerMode": "none",
   "ignoreFieldNames": [
     "password",
     "token",

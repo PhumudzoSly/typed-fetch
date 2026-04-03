@@ -6,7 +6,7 @@ icon: Globe
 
 # Browser Support
 
-typed-fetch works seamlessly in modern browsers and supports mixed client/server architectures.
+typed-fetch works seamlessly in modern browsers. When running in a browser, observations are automatically sent to the local `typed-fetch watch` server — no extra configuration needed.
 
 ## Browser Requirements
 
@@ -19,7 +19,6 @@ typed-fetch works seamlessly in modern browsers and supports mixed client/server
 ```ts
 import { typedFetch } from '@phumudzo/typed-fetch';
 
-// Fetch from browser
 const result = await typedFetch(
   'https://api.example.com/user/123',
   { method: 'GET' },
@@ -31,78 +30,80 @@ if (result.status === 200) {
 }
 ```
 
-## Browser Storage
+No special browser setup needed — `typedFetch` works the same way in Node.js and the browser.
 
-By default, browser observations are stored in `localStorage`:
+## How Observations Work in the Browser
 
-```ts
-// Stored at: localStorage['__typed_fetch_registry__']
-```
+When `observerMode` is `"auto"` (the default), typed-fetch detects its runtime environment:
 
-**Configuration**:
+- **Node.js** → writes observations directly to the registry file
+- **Browser** → POSTs observations to the local HTTP observer server at `http://localhost:{observerPort}/__typed-fetch/observe`
 
-```json
-{
-  "browserStorageKey": "__typed_fetch_registry__"
-}
-```
+The observer server is started automatically by `typed-fetch watch`. From the browser's perspective, calling `typedFetch()` is all that's needed — observation and type generation happen in the background.
 
-## Mixed Client/Server Applications
-
-For applications with both browser and server API calls, use the listener to unify observations:
-
-### Step 1: Start the listener
+## Getting Started with a Browser App
 
 ```bash
-npx typed-fetch listen
+# 1. Initialize (auto-detects generatedPath from your tsconfig)
+npx typed-fetch init
+
+# 2. Start the watch server
+npx typed-fetch watch
 ```
 
-This starts a sync server at `http://127.0.0.1:43111`.
-
-### Step 2: Configure sync URL
-
-```json
-{
-  "syncUrl": "http://127.0.0.1:43111/sync",
-  "syncTimeoutMs": 1500
-}
 ```
-
-### Step 3: Run your app
+Watching .typed-fetch/registry.json
+Observer listening on http://localhost:7779
+  Press Ctrl+C to stop.
+```
 
 ```bash
+# 3. Run your app in another terminal
 npm run dev
 ```
 
-Browser and server observations are now automatically synced to the same registry.
+Make API calls in the browser. Types are regenerated automatically after each call.
 
-### Step 4: Generate types
+## Works with Any Framework
 
-```bash
-npx typed-fetch generate
-```
+Because the observation transport is plain HTTP POST, it works with any dev setup — no plugins or framework-specific configuration required.
 
-All observations (browser + server) are included in generated types.
+| Framework | Setup |
+|-----------|-------|
+| Vite (React, Vue, Svelte) | `typed-fetch init` + `typed-fetch watch` |
+| Create React App | `typed-fetch init` + `typed-fetch watch` |
+| Next.js | `typed-fetch init` + `typed-fetch watch` |
+| Plain HTML / no bundler | `typed-fetch init` + `typed-fetch watch` |
+
+## Mixed Client/Server Applications
+
+Both browser and Node.js calls flow through the same `typed-fetch watch` process:
+
+- **Node.js calls** → write directly to the registry file → watcher detects change → types regenerate
+- **Browser calls** → POST to observer server → observer writes to registry → watcher detects change → types regenerate
+
+The registry merges shapes from both sources automatically, so your generated types reflect all observed responses regardless of where they originated.
 
 ## Typical Workflow
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ Terminal 1: Start listener                              │
-│ $ npx typed-fetch listen                                │
-│ Listening at http://127.0.0.1:43111                     │
+│ Terminal 1: typed-fetch watch                           │
+│ $ npx typed-fetch watch                                 │
+│ Watching .typed-fetch/registry.json                     │
+│ Observer listening on http://localhost:7779             │
 └─────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────┐
-│ Terminal 2: Start development server                    │
+│ Terminal 2: Development server                          │
 │ $ npm run dev                                           │
-│ Server and browser both making API calls...              │
+│ Browser + server both making API calls...               │
 └─────────────────────────────────────────────────────────┘
 
+             ↓ types regenerate automatically ↓
+
 ┌─────────────────────────────────────────────────────────┐
-│ Terminal 3: Generate types when ready                   │
-│ $ npx typed-fetch generate                              │
-│ Updated generated/typed-fetch.d.ts                      │
+│ src/generated/typed-fetch.d.ts updated                  │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -112,14 +113,8 @@ All observations (browser + server) are included in generated types.
 import { typedFetch } from '@phumudzo/typed-fetch';
 import { useEffect, useState } from 'react';
 
-interface User {
-  id: number;
-  name: string;
-  email: string;
-}
-
 export function UserProfile({ userId }: { userId: number }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<{ id: number; name: string; email: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -132,7 +127,7 @@ export function UserProfile({ userId }: { userId: number }) {
       );
 
       if (result.status === 200) {
-        setUser(result.data);
+        setUser(result.data); // typed once types are generated
       } else if (result.status === 404) {
         setError('User not found');
       } else {
@@ -158,41 +153,25 @@ export function UserProfile({ userId }: { userId: number }) {
 }
 ```
 
-## CORS & Security
+## Custom Observer Port
 
-typed-fetch respects CORS policies:
+If port 7779 conflicts with another service, change it in `typed-fetch.config.json`:
 
-- Follows same-origin policy
-- Honors CORS headers from server
-- Works with credentials: include
-
-```ts
-const result = await typedFetch(
-  'https://api.example.com/user',
-  {
-    method: 'GET',
-    credentials: 'include'
-  },
-  { endpointKey: 'GET /user' }
-);
+```json
+{
+  "observerPort": 8888
+}
 ```
 
-## localStorage Limits
+The watch server and browser runtime both read this value, so changing it in one place is all that's needed.
 
-Browser `localStorage` has limits:
+## CORS
 
-- **Typical limit**: 5-10 MB per origin
-- **Limit depends on browser**
-- **Impact**: Very large registries may exceed limits
-
-**If you hit limits:**
-1. Use `npx typed-fetch clean --registry` to reset
-2. Consider using `observerMode: "none"` in production
-3. Generate types once and disable observation
+The observer server runs on a different port to your dev server. typed-fetch handles this automatically — the watch server sets `Access-Control-Allow-Origin: *` on all responses so browser POSTs are never blocked by CORS.
 
 ## Disabling Observation in Browser
 
-To prevent observation in browser (e.g., production):
+To prevent observation entirely (e.g., in production):
 
 ```json
 {
@@ -201,39 +180,9 @@ To prevent observation in browser (e.g., production):
 ```
 
 With this setting:
-- typedFetch still works normally
-- No observations are recorded
-- Uses less memory/storage
-- Generated types still work
-
-Use in production to:
-- Avoid localStorage usage
-- Improve performance
-- Reduce surface area
-- Keep only the type definitions
-
-## Cross-Origin Requests
-
-For cross-origin API calls:
-
-1. **Ensure CORS is configured** on your API
-2. **Use full URLs**:
-   ```ts
-   await typedFetch(
-     'https://api.example.com/data',
-     { method: 'GET' },
-     { endpointKey: 'GET /data' }
-   );
-   ```
-3. **Include credentials if needed**:
-   ```ts
-   await typedFetch(url, {
-     credentials: 'include',
-     headers: {
-       'Authorization': `Bearer ${token}`
-     }
-   }, { endpointKey });
-   ```
+- `typedFetch` still works normally
+- No observations are recorded or sent
+- Already-generated types continue to work
 
 ## Next: API Reference
 
