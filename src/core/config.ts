@@ -2,7 +2,7 @@ import type { TypedFetchConfig } from "./types";
 
 const DEFAULT_CONFIG: TypedFetchConfig = {
   registryPath: ".typed-fetch/registry.json",
-  generatedPath: "generated/typed-fetch.d.ts",
+  generatedPath: "src/generated/typed-fetch.d.ts",
   include: [],
   exclude: [],
   dynamicSegmentPatterns: ["numeric", "uuid", "hash"],

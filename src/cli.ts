@@ -12,6 +12,117 @@ import {
 } from "./core/registry";
 import type { ShapeNode } from "./core/types";
 
+function stripJsonComments(raw: string): string {
+  return raw
+    .replace(/\/\/[^\n]*/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+}
+
+type TsConfig = {
+  include?: string[];
+  references?: { path: string }[];
+  extends?: string;
+};
+
+function detectGeneratedPath(): { generatedPath: string; detected: boolean; source: string } {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const fs = require("fs") as typeof import("fs");
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const path = require("path") as typeof import("path");
+
+  const NON_APP = /(node|server|scripts|worker|test|spec)/i;
+
+  function readTsConfig(filePath: string): TsConfig | null {
+    try {
+      if (!fs.existsSync(filePath)) return null;
+      const raw = stripJsonComments(fs.readFileSync(filePath, "utf8"));
+      return JSON.parse(raw) as TsConfig;
+    } catch {
+      return null;
+    }
+  }
+
+  function sourceRootFromIncludes(include: string[]): string | null {
+    const dirs: string[] = [];
+    for (const pattern of include) {
+      // Skip plain file references like "next-env.d.ts"
+      if (/\.[a-z]+$/i.test(pattern) && !pattern.includes("*")) continue;
+      const first = pattern.split("/")[0];
+      if (!first || first === "." || first === "**" || first === "*") {
+        dirs.push(""); // root-level pattern
+      } else {
+        dirs.push(first);
+      }
+    }
+    for (const preferred of ["src", "app", "pages"]) {
+      if (dirs.includes(preferred)) return preferred;
+    }
+    const concrete = dirs.find((d) => d !== "");
+    if (concrete) return concrete;
+    if (dirs.length > 0) return ""; // root
+    return null;
+  }
+
+  function resolveAppConfig(
+    configPath: string,
+    depth = 0,
+  ): { include: string[]; source: string } | null {
+    if (depth > 5) return null;
+    const config = readTsConfig(configPath);
+    if (!config) return null;
+    const dir = path.dirname(configPath);
+
+    if (Array.isArray(config.include)) {
+      return { include: config.include, source: configPath };
+    }
+
+    if (Array.isArray(config.references)) {
+      for (const ref of config.references) {
+        if (typeof ref?.path !== "string") continue;
+        if (NON_APP.test(ref.path)) continue;
+        const refFull = path.resolve(dir, ref.path);
+        const refPath = refFull.endsWith(".json")
+          ? refFull
+          : path.join(refFull, "tsconfig.json");
+        const result = resolveAppConfig(refPath, depth + 1);
+        if (result) return result;
+      }
+    }
+
+    if (typeof config.extends === "string") {
+      const ext = path.resolve(dir, config.extends);
+      const extPath = ext.endsWith(".json") ? ext : `${ext}.json`;
+      return resolveAppConfig(extPath, depth + 1);
+    }
+
+    return null;
+  }
+
+  // Check tsconfig.app.json first (Vite, some CRA setups)
+  for (const name of ["tsconfig.app.json", "tsconfig.base.json"]) {
+    const cfg = readTsConfig(name);
+    if (cfg?.include) {
+      const root = sourceRootFromIncludes(cfg.include);
+      if (root !== null) {
+        const prefix = root === "" ? "" : `${root}/`;
+        return { generatedPath: `${prefix}generated/typed-fetch.d.ts`, detected: true, source: name };
+      }
+    }
+  }
+
+  // Fall back to resolving through tsconfig.json reference chain
+  const resolved = resolveAppConfig("tsconfig.json");
+  if (resolved) {
+    const root = sourceRootFromIncludes(resolved.include);
+    if (root !== null) {
+      const prefix = root === "" ? "" : `${root}/`;
+      return { generatedPath: `${prefix}generated/typed-fetch.d.ts`, detected: true, source: resolved.source };
+    }
+  }
+
+  return { generatedPath: "src/generated/typed-fetch.d.ts", detected: false, source: "default" };
+}
+
 function readCliVersion(): string {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -32,15 +143,20 @@ function readCliVersion(): string {
 function initProject(
   force: boolean,
   configPath?: string,
-): { configPath: string; created: boolean } {
+): { configPath: string; created: boolean; detection: ReturnType<typeof detectGeneratedPath> } {
   const targetPath = configPath ?? "typed-fetch.config.json";
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const fs = require("fs") as typeof import("fs");
+
+  const detection = detectGeneratedPath();
+
   if (fs.existsSync(targetPath) && !force) {
-    return { configPath: targetPath, created: false };
+    return { configPath: targetPath, created: false, detection };
   }
 
   const config = getDefaultConfig();
+  config.generatedPath = detection.generatedPath;
+
   fs.writeFileSync(
     `${targetPath}`,
     `${JSON.stringify(config, null, 2)}\n`,
@@ -60,7 +176,7 @@ function initProject(
     fs.writeFileSync(gitignorePath, next, "utf8");
   }
 
-  return { configPath: targetPath, created: true };
+  return { configPath: targetPath, created: true, detection };
 }
 
 async function run(): Promise<void> {
@@ -250,6 +366,18 @@ async function run(): Promise<void> {
         return;
       }
       process.stdout.write(`${pc.green("Initialized")} ${result.configPath}\n`);
+      if (result.detection.detected) {
+        process.stdout.write(
+          `${pc.cyan("Detected")} ${result.detection.source} → generatedPath: ${result.detection.generatedPath}\n`,
+        );
+      } else {
+        process.stdout.write(
+          `${pc.yellow("Warning")} Could not resolve a TypeScript include path from tsconfig.\n`,
+        );
+        process.stdout.write(
+          `${pc.dim(`  Defaulting to ${result.detection.generatedPath} — verify this is within your tsconfig include paths.`)}\n`,
+        );
+      }
     });
 
   program
