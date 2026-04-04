@@ -1,0 +1,82 @@
+---
+title: Adapters
+description: Framework adapters for Hono, Next.js, and custom runtimes
+icon: Blocks
+---
+
+# Framework Adapters
+
+typed-fetch includes server-side adapters to observe JSON responses from your framework handlers and keep generated types updated during development.
+
+## Hono
+
+### Setup
+
+```bash
+pnpm add hono @phumudzo/typed-fetch
+```
+
+```ts
+import { Hono } from 'hono';
+import { typedFetchObserver } from '@phumudzo/typed-fetch/adapters/hono';
+
+const app = new Hono();
+app.use('*', typedFetchObserver());
+```
+
+### Usage
+
+```ts
+app.get('/api/users/:id', (c) => {
+  return c.json({ id: c.req.param('id'), name: 'Alice' }, 200);
+});
+```
+
+## Next.js App Router
+
+### Setup
+
+```ts
+import { withTypedFetchObserver } from '@phumudzo/typed-fetch/adapters/next';
+```
+
+### Usage
+
+```ts
+// app/api/users/[id]/route.ts
+import { withTypedFetchObserver } from '@phumudzo/typed-fetch/adapters/next';
+
+export const GET = withTypedFetchObserver(
+  'GET /api/users/:id',
+  async (req) => {
+    const id = new URL(req.url).pathname.split('/').at(-1);
+    return Response.json({ id, name: 'Alice' });
+  }
+);
+```
+
+## Generic Adapter
+
+Use this when your framework exposes a standard Web `Response` object.
+
+### Setup
+
+```ts
+import { observeResponse } from '@phumudzo/typed-fetch/adapters/generic';
+```
+
+### Usage
+
+```ts
+async function handler() {
+  const response = Response.json({ ok: true }, { status: 200 });
+  await observeResponse('GET /health', response);
+  return response;
+}
+```
+
+## Notes
+
+- Adapters only observe when `NODE_ENV=development`.
+- Non-JSON responses are ignored.
+- Observation failures never block the response path.

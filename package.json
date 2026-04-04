@@ -1,6 +1,6 @@
 {
   "name": "@phumudzo/typed-fetch",
-  "version": "0.1.10",
+  "version": "0.2.0",
   "description": "Privacy-first status-aware typed fetch with type generation from response shapes",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -8,6 +8,34 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "default": "./dist/react.js"
+    },
+    "./adapters/generic": {
+      "types": "./dist/adapters/generic.d.ts",
+      "default": "./dist/adapters/generic.js"
+    },
+    "./adapters/hono": {
+      "types": "./dist/adapters/hono.d.ts",
+      "default": "./dist/adapters/hono.js"
+    },
+    "./adapters/next": {
+      "types": "./dist/adapters/next.d.ts",
+      "default": "./dist/adapters/next.js"
+    }
+  },
+  "peerDependencies": {
+    "hono": ">=3",
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "hono": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
     }
   },
   "files": [
@@ -54,6 +82,7 @@
   "devDependencies": {
     "@types/node": "^22.13.14",
     "@types/picomatch": "^4.0.3",
+    "@types/react": "^18.0.0",
     "typescript": "^5.8.2"
   }
 }

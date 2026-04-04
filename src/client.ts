@@ -1,6 +1,7 @@
 import { typedFetch } from "./tFetch";
-import type { EndpointKey, TypedFetchConfig } from "./core/types";
-import type { TypedFetchResult } from "./tFetch";
+import type { TypedFetchConfig } from "./core/types";
+import type { TypedFetchResult, TypedEndpointKey } from "./tFetch";
+import type { TypedFetchCache } from "./cache";
 
 type TypedFetchRequestInit = RequestInit;
 
@@ -11,12 +12,19 @@ type ClientOptions = {
   config?: Partial<TypedFetchConfig>;
   /** Optional path to a typed-fetch config file. */
   configPath?: string;
+  /**
+   * Optional cache applied to every request made by this client.
+   * Per-call `options.cache` takes precedence if both are provided.
+   */
+  cache?: TypedFetchCache;
 };
 
-type ClientFetchOptions<K extends EndpointKey> = {
+type ClientFetchOptions<K extends TypedEndpointKey> = {
   endpointKey: K;
   config?: Partial<TypedFetchConfig>;
   configPath?: string;
+  /** Per-call cache override. Falls back to the client-level cache when omitted. */
+  cache?: TypedFetchCache;
 };
 
 type TypedFetchClient = {
@@ -32,7 +40,7 @@ type TypedFetchClient = {
    *   endpointKey: "GET /users/:id",
    * });
    */
-  fetch<K extends EndpointKey = EndpointKey>(
+  fetch<K extends TypedEndpointKey = TypedEndpointKey>(
     path: string,
     init: TypedFetchRequestInit | undefined,
     options: ClientFetchOptions<K>,
@@ -46,8 +54,10 @@ type TypedFetchClient = {
  * @param options - Client options. `baseUrl` is required.
  *
  * @example
+ * const cache = createTypedFetchCache({ staleTime: 60_000 });
  * const client = createTypedFetchClient({
  *   baseUrl: "https://api.example.com",
+ *   cache,
  * });
  *
  * const result = await client.fetch("/users/123", undefined, {
@@ -55,11 +65,16 @@ type TypedFetchClient = {
  * });
  */
 export function createTypedFetchClient(options: ClientOptions): TypedFetchClient {
-  const { baseUrl, config: clientConfig, configPath: clientConfigPath } = options;
+  const {
+    baseUrl,
+    config: clientConfig,
+    configPath: clientConfigPath,
+    cache: clientCache,
+  } = options;
   const normalizedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
 
   return {
-    fetch<K extends EndpointKey = EndpointKey>(
+    fetch<K extends TypedEndpointKey = TypedEndpointKey>(
       path: string,
       init: TypedFetchRequestInit | undefined,
       fetchOptions: ClientFetchOptions<K>,
@@ -76,6 +91,7 @@ export function createTypedFetchClient(options: ClientOptions): TypedFetchClient
         endpointKey: fetchOptions.endpointKey,
         config: Object.keys(mergedConfig).length > 0 ? mergedConfig : undefined,
         configPath: fetchOptions.configPath ?? clientConfigPath,
+        cache: fetchOptions.cache ?? clientCache,
       });
     },
   };

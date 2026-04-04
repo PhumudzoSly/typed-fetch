@@ -2,6 +2,17 @@
 
 All notable changes to `@phumudzo/typed-fetch` are documented here.
 
+## [0.1.11] — 2026-04-04
+
+### Added
+
+- New server adapters:
+  - `@phumudzo/typed-fetch/adapters/generic` (`observeResponse`)
+  - `@phumudzo/typed-fetch/adapters/hono` (`typedFetchObserver`)
+  - `@phumudzo/typed-fetch/adapters/next` (`withTypedFetchObserver`)
+- Optional `hono` peer dependency metadata for framework integration.
+- New docs section for framework adapters with setup and usage examples.
+
 ## [0.1.8] — 2026-04-03
 
 ### Fixed
