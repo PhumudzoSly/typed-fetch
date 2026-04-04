@@ -85,6 +85,46 @@ Create `typed-fetch.config.json` in your project root:
 - `npx typed-fetch export`
 - `npx typed-fetch import <file>`
 
+## Server Adapters
+
+typed-fetch also ships server-side adapters for observing JSON responses from your route handlers:
+
+- `@phumudzo/typed-fetch/adapters/hono`
+- `@phumudzo/typed-fetch/adapters/next`
+- `@phumudzo/typed-fetch/adapters/generic`
+
+### Hono
+
+```ts
+import { Hono } from "hono";
+import { typedFetchObserver } from "@phumudzo/typed-fetch/adapters/hono";
+
+const app = new Hono();
+app.use("*", typedFetchObserver());
+```
+
+### Next.js App Router
+
+```ts
+import { withTypedFetchObserver } from "@phumudzo/typed-fetch/adapters/next";
+
+export const GET = withTypedFetchObserver(
+  "GET /api/users/:id",
+  async () => Response.json({ id: 1, name: "Alice" }),
+);
+```
+
+### Generic Adapter
+
+```ts
+import { observeResponse } from "@phumudzo/typed-fetch/adapters/generic";
+
+const response = Response.json({ ok: true }, { status: 200 });
+await observeResponse("GET /health", response);
+```
+
+Adapters only observe in `NODE_ENV=development` and never block the response path.
+
 ## VS Code Extension
 
 [Typed Fetch Tools](https://marketplace.visualstudio.com/items?itemName=phumudzo.typed-fetch-tools) adds CodeLens and quick actions for generation and listener workflows directly in VS Code.
