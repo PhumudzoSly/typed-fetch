@@ -87,7 +87,11 @@ export class TypedFetchCache {
   }
 
   isStale(entry: { fetchedAt: number }): boolean {
-    return this.staleTime === 0 || Date.now() - entry.fetchedAt > this.staleTime;
+    if (this.staleTime === 0) return true;
+    const age = Date.now() - entry.fetchedAt;
+    // A negative age means fetchedAt is in the future (clock skew / NTP jump).
+    // Treat as stale so we never serve a permanently "fresh" entry.
+    return age < 0 || age > this.staleTime;
   }
 
   set<T>(key: string, result: T, endpointKey: string): void {

@@ -202,6 +202,14 @@ export function useTypedFetch<
 
   // ── Seed initialData before the first render (in render, not in effect) ──
   const initialSeededRef = React.useRef(false);
+  // Track the previous cacheKey so we can reset the seed flag when the key
+  // changes (e.g. the consumer navigates to a different URL). We must do this
+  // BEFORE the seeding check below so the reset takes effect immediately.
+  const prevCacheKeyRef = React.useRef(cacheKey);
+  if (prevCacheKeyRef.current !== cacheKey) {
+    prevCacheKeyRef.current = cacheKey;
+    initialSeededRef.current = false;
+  }
   if (
     options.initialData !== undefined &&
     !initialSeededRef.current &&
@@ -209,9 +217,6 @@ export function useTypedFetch<
   ) {
     cache.set(cacheKey, options.initialData, options.endpointKey);
     initialSeededRef.current = true;
-  }
-  if (cacheKey !== React.useRef(cacheKey).current) {
-    initialSeededRef.current = false;
   }
 
   // ── useSyncExternalStore — stable snapshot to satisfy React's caching check ─
@@ -254,15 +259,26 @@ export function useTypedFetch<
   const callbacksRef = React.useRef(options);
   callbacksRef.current = options;
 
+  // ── Stable input/init refs — lets effects always read the latest values ───
+  // This prevents stale closures when init properties (e.g. auth headers) change
+  // without causing a cacheKey change (which would re-run the effects anyway).
+  const inputRef = React.useRef(input);
+  inputRef.current = input;
+  const initRef = React.useRef(init);
+  initRef.current = init;
+
   // ── Initial / key-change fetch ─────────────────────────────────────────────
   React.useEffect(() => {
     if (!enabled) return;
 
     const controller = new AbortController();
+    const currentInit = initRef.current;
 
     typedFetch<K>(
-      input,
-      init ? { ...init, signal: controller.signal } : { signal: controller.signal },
+      inputRef.current,
+      currentInit
+        ? { ...currentInit, signal: controller.signal }
+        : { signal: controller.signal },
       {
         endpointKey: callbacksRef.current.endpointKey,
         config: callbacksRef.current.config,
@@ -288,8 +304,8 @@ export function useTypedFetch<
     if (!interval || !enabled) return;
 
     const id = setInterval(() => {
-      cache.invalidate(input, method);
-      typedFetch<K>(input, init, {
+      cache.invalidate(inputRef.current, method);
+      typedFetch<K>(inputRef.current, initRef.current, {
         endpointKey: callbacksRef.current.endpointKey,
         config: callbacksRef.current.config,
         cache,
@@ -309,7 +325,7 @@ export function useTypedFetch<
       if (!enabled) return;
       const e = cache.get(cacheKey);
       if (!e || cache.isStale(e)) {
-        typedFetch<K>(input, init, {
+        typedFetch<K>(inputRef.current, initRef.current, {
           endpointKey: callbacksRef.current.endpointKey,
           config: callbacksRef.current.config,
           cache,
@@ -329,7 +345,7 @@ export function useTypedFetch<
 
     const handleOnline = () => {
       if (!enabled) return;
-      typedFetch<K>(input, init, {
+      typedFetch<K>(inputRef.current, initRef.current, {
         endpointKey: callbacksRef.current.endpointKey,
         config: callbacksRef.current.config,
         cache,
@@ -357,8 +373,8 @@ export function useTypedFetch<
 
   /** Invalidate this exact URL and immediately re-fetch. */
   const refetch = React.useCallback(() => {
-    cache.invalidate(input, method);
-    typedFetch<K>(input, init, {
+    cache.invalidate(inputRef.current, method);
+    typedFetch<K>(inputRef.current, initRef.current, {
       endpointKey: callbacksRef.current.endpointKey,
       config: callbacksRef.current.config,
       cache,
