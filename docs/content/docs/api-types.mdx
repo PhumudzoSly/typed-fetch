@@ -189,6 +189,54 @@ const options: TypedFetchOptions<"GET /data"> = {
 };
 ```
 
+## Adapter Exports
+
+typed-fetch provides additional adapter entry points for server frameworks:
+
+```ts
+import { observeResponse } from '@phumudzo/typed-fetch/adapters/generic';
+import { typedFetchObserver } from '@phumudzo/typed-fetch/adapters/hono';
+import { withTypedFetchObserver } from '@phumudzo/typed-fetch/adapters/next';
+```
+
+### `observeResponse` (generic)
+
+```ts
+export async function observeResponse(
+  endpointKey: string,
+  response: Response,
+  config?: Partial<TypedFetchConfig>,
+): Promise<void>;
+```
+
+- Observes JSON responses and queues shape observations.
+- Schedules type generation after registry flush.
+- Runs only in `NODE_ENV=development`.
+
+### `typedFetchObserver` (Hono)
+
+```ts
+export function typedFetchObserver(
+  config?: Partial<TypedFetchConfig>,
+): (c: HonoContext, next: () => Promise<void>) => Promise<void>;
+```
+
+- Hono middleware that observes all route responses.
+- Automatically builds endpoint keys from method + `routePath`.
+
+### `withTypedFetchObserver` (Next.js)
+
+```ts
+export function withTypedFetchObserver(
+  endpointKey: string,
+  handler: (req: Request, ctx?: unknown) => Promise<Response>,
+  config?: Partial<TypedFetchConfig>,
+): (req: Request, ctx?: unknown) => Promise<Response>;
+```
+
+- Wraps Next.js App Router handlers.
+- Requires explicit `endpointKey` (file-system routes are not available at runtime).
+
 ## Key Type Narrowing Patterns
 
 ### Status-based narrowing
