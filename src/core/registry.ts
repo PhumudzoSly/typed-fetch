@@ -160,8 +160,11 @@ export function observeShape(args: {
   return registry;
 }
 
+// Reuse a single buffer for all lock-retry sleeps — avoids per-call allocation.
+const _sleepArray = new Int32Array(new SharedArrayBuffer(4));
+
 function sleepMs(ms: number): void {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  Atomics.wait(_sleepArray, 0, 0, ms);
 }
 
 function withRegistryLock<T>(registryPath: string, fn: () => T): T {

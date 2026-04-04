@@ -309,11 +309,27 @@ async function run(): Promise<void> {
         }
 
         if (req.method === "POST" && req.url === "/__typed-fetch/observe") {
+          const MAX_BODY_BYTES = 1_048_576; // 1 MB — guards against runaway clients
           let body = "";
+          let bodyBytes = 0;
+          let oversized = false;
+
+          req.on("error", () => {
+            if (!res.headersSent) { res.writeHead(400); res.end(); }
+          });
+
           req.on("data", (chunk: Buffer) => {
+            bodyBytes += chunk.length;
+            if (bodyBytes > MAX_BODY_BYTES) {
+              oversized = true;
+              req.destroy();
+              if (!res.headersSent) { res.writeHead(413); res.end(); }
+              return;
+            }
             body += chunk.toString();
           });
           req.on("end", () => {
+            if (oversized) return;
             try {
               const obs = JSON.parse(body) as {
                 endpointKey: string;
@@ -349,6 +365,17 @@ async function run(): Promise<void> {
         res.end();
       });
 
+      server.on("error", (err: NodeJS.ErrnoException) => {
+        if (err.code === "EADDRINUSE") {
+          process.stderr.write(
+            `${pc.red("[typed-fetch]")} Port ${observerPort} is already in use.\n` +
+            `Set a different port with "observerPort" in your typed-fetch config.\n`,
+          );
+        } else {
+          process.stderr.write(`${pc.red("[typed-fetch] Watch server error:")} ${err.message}\n`);
+        }
+        process.exit(1);
+      });
       server.listen(observerPort, "127.0.0.1");
     });
 
