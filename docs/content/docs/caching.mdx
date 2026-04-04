@@ -1,0 +1,207 @@
+---
+title: Caching
+description: In-memory cache with deduplication, stale-while-revalidate, retry, and invalidation
+icon: Database
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+# Caching
+
+typed-fetch ships an optional in-memory cache that gives you TanStack Query-style behaviour with zero extra dependencies. It works everywhere — Node.js, browsers, edge functions, and React.
+
+<Callout type="info">
+The cache is fully opt-in. Pass it wherever you want caching; leave it out and everything behaves exactly as before.
+</Callout>
+
+## Create a cache
+
+```ts
+import { createTypedFetchCache } from "@phumudzo/typed-fetch";
+
+const cache = createTypedFetchCache({
+  staleTime: 60_000,   // serve cached result for 60 s before refetching
+  gcTime: 5 * 60_000,  // remove unused entries after 5 min
+  retry: 3,            // retry network errors up to 3 times
+});
+```
+
+### `CacheOptions`
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `staleTime` | `number` | `0` | How long (ms) a cached entry stays fresh. `0` = always stale, but concurrent callers still share one in-flight request. |
+| `gcTime` | `number` | `300_000` | How long (ms) before an unused entry is garbage-collected. The timer resets on every write. |
+| `retry` | `number \| false` | `3` | Max retries on network error (`status === 0`). `false` disables retries. |
+| `retryDelay` | `(attempt: number) => number` | exponential back-off capped at 30 s | Custom delay between retries. |
+
+## Use with `typedFetch`
+
+Pass `cache` in the options object. The first call fetches from the network; subsequent calls within `staleTime` return the cached result instantly.
+
+```ts
+import { typedFetch, createTypedFetchCache } from "@phumudzo/typed-fetch";
+
+const cache = createTypedFetchCache({ staleTime: 60_000 });
+
+// First call — network request
+const r1 = await typedFetch("/api/users/1", undefined, {
+  endpointKey: "GET /api/users/:id",
+  cache,
+});
+
+// Within staleTime — served from cache, no network request
+const r2 = await typedFetch("/api/users/1", undefined, {
+  endpointKey: "GET /api/users/:id",
+  cache,
+});
+
+console.log(r1 === r2); // true — same object reference
+```
+
+### Concurrent deduplication
+
+If two callers request the same URL simultaneously, only one network request is made. Both callers await the same in-flight promise.
+
+```ts
+// Both of these share exactly one network request
+const [a, b] = await Promise.all([
+  typedFetch("/api/users/1", undefined, { endpointKey: "GET /users/:id", cache }),
+  typedFetch("/api/users/1", undefined, { endpointKey: "GET /users/:id", cache }),
+]);
+```
+
+## Use with `createTypedFetchClient`
+
+Set a cache at the client level so every call inherits it. Per-call `options.cache` overrides the client-level cache.
+
+```ts
+import { createTypedFetchClient, createTypedFetchCache } from "@phumudzo/typed-fetch";
+
+const cache = createTypedFetchCache({ staleTime: 30_000 });
+
+const client = createTypedFetchClient({
+  baseUrl: "https://api.example.com",
+  cache, // applied to every request made by this client
+});
+
+const result = await client.fetch("/users/1", undefined, {
+  endpointKey: "GET /users/:id",
+});
+```
+
+## Invalidation
+
+### Invalidate one URL
+
+```ts
+// Remove the cached entry for GET /api/users/1
+cache.invalidate("https://api.example.com/users/1");
+
+// Specify method (defaults to "GET")
+cache.invalidate("https://api.example.com/users/1", "DELETE");
+```
+
+### Invalidate all URLs for an endpoint pattern
+
+`invalidateByEndpoint` removes every cached URL that was stored under a given endpoint key — useful after a mutation that affects a list or resource type.
+
+```ts
+// Clears /api/users/1, /api/users/2, /api/users/42 … all at once
+cache.invalidateByEndpoint("GET /api/users/:id");
+```
+
+### Invalidate everything
+
+```ts
+cache.invalidateAll();
+```
+
+## Retry on network error
+
+Network errors (`status === 0`) are never cached. When `retry > 0`, the cache automatically retries failed requests with exponential back-off before returning the error to the caller.
+
+```ts
+const cache = createTypedFetchCache({
+  retry: 3,
+  retryDelay: (attempt) => Math.min(1_000 * 2 ** attempt, 30_000),
+  // attempt 0 → 1 s, attempt 1 → 2 s, attempt 2 → 4 s
+});
+```
+
+## Manual cache inspection
+
+```ts
+const key = cache.buildKey("https://api.example.com/users/1", "GET");
+// → "GET:https://api.example.com/users/1"
+
+const entry = cache.get(key);
+if (entry) {
+  console.log(entry.result);       // the cached TypedFetchResult
+  console.log(entry.fetchedAt);    // timestamp (ms)
+  console.log(entry.endpointKey);  // "GET /users/:id"
+  console.log(cache.isStale(entry)); // true / false based on staleTime
+}
+```
+
+## React integration
+
+The cache is designed to work seamlessly with `useSyncExternalStore`. Use `TypedFetchProvider` to share a single cache instance across your whole app — see [React Hooks](/docs/react-hooks) for the full guide.
+
+```tsx
+import { createTypedFetchCache } from "@phumudzo/typed-fetch";
+import { TypedFetchProvider } from "@phumudzo/typed-fetch/react";
+
+const cache = createTypedFetchCache({ staleTime: 60_000 });
+
+export function App() {
+  return (
+    <TypedFetchProvider cache={cache}>
+      <YourApp />
+    </TypedFetchProvider>
+  );
+}
+```
+
+## `TypedFetchCache` API reference
+
+```ts
+class TypedFetchCache {
+  // Config
+  readonly staleTime: number;
+  readonly gcTime: number;
+  readonly retry: number | false;
+  readonly retryDelay: (attempt: number) => number;
+
+  // Key
+  buildKey(input: RequestInfo | URL, method: string): string;
+
+  // Entry access
+  get<T>(key: string): { result: T; fetchedAt: number; endpointKey: string } | undefined;
+  isStale(entry: { fetchedAt: number }): boolean;
+  set<T>(key: string, result: T, endpointKey: string): void;
+
+  // In-flight deduplication
+  getInFlight<T>(key: string): Promise<T> | undefined;
+  setInFlight<T>(key: string, promise: Promise<T>): void;
+  clearInFlight(key: string): void;
+
+  // React subscription (useSyncExternalStore)
+  subscribe(key: string, cb: () => void): () => void;
+
+  // Invalidation
+  invalidate(input: RequestInfo | URL, method?: string): void;
+  invalidateByEndpoint(endpointKey: string): void;
+  invalidateAll(): void;
+
+  // Cleanup
+  destroy(): void;
+}
+
+function createTypedFetchCache(options?: CacheOptions): TypedFetchCache;
+```
+
+## Next: React Hooks
+
+Learn how to use the cache with [`useTypedFetch` and `useTypedMutation`](/docs/react-hooks).

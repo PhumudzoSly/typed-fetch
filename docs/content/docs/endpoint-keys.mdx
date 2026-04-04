@@ -1,0 +1,168 @@
+---
+title: Endpoint Keys
+description: Type-safe endpoint keys with autocomplete, user-defined endpoints, and generated types
+icon: Key
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# Endpoint Keys
+
+Every `typedFetch` call requires an `endpointKey` — a string in `"METHOD /path/:param"` format that identifies the endpoint and links the call to a set of generated response types.
+
+```ts
+await typedFetch("/users/1", undefined, { endpointKey: "GET /users/:id" });
+//                                                       ^^^^^^^^^^^^^^^^
+//                                          TypedEndpointKey — fully typed
+```
+
+## Format
+
+```
+METHOD /path/:dynamic-segment
+```
+
+- `METHOD` — uppercase HTTP verb: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, etc.
+- `/path/:param` — URL path with `:colon` placeholders for dynamic segments.
+- A single space separates method from path.
+
+### Examples
+
+```
+GET /users
+GET /users/:id
+POST /users
+PATCH /users/:id
+DELETE /users/:id
+GET /posts/:postId/comments/:commentId
+```
+
+## `TypedEndpointKey`
+
+`endpointKey` is typed as `TypedEndpointKey`, which is a union of all known endpoint keys **plus** `string & {}` so IDEs autocomplete known keys while still accepting any string:
+
+```ts
+export type TypedEndpointKey = KnownEndpointKey | (string & {});
+```
+
+This means:
+- IDEs suggest all keys from `TypedFetchGeneratedResponses` and `TypedFetchUserEndpoints`.
+- After selecting a known key, `result.data` is narrowed to the correct type per status code.
+- Any arbitrary string is still accepted — typed-fetch never rejects an unknown key.
+
+## Auto-generated types: `TypedFetchGeneratedResponses`
+
+After running `npx typed-fetch generate`, the CLI produces a `.d.ts` file that augments `TypedFetchGeneratedResponses`:
+
+```ts
+// src/generated/typed-fetch.d.ts (auto-generated — do not edit)
+declare module "@phumudzo/typed-fetch" {
+  interface TypedFetchGeneratedResponses {
+    "GET /users/:id": {
+      200: { id: number; name: string; email: string };
+      404: { error: string };
+    };
+    "POST /users": {
+      201: { id: number; name: string };
+      400: { error: string; fields: string[] };
+    };
+  }
+}
+```
+
+Once generated, narrowing just works:
+
+```ts
+const result = await typedFetch("/users/1", undefined, {
+  endpointKey: "GET /users/:id",
+});
+
+if (result.status === 200) {
+  console.log(result.data.name);  // ✅ string
+  console.log(result.data.email); // ✅ string
+}
+
+if (result.status === 404) {
+  console.log(result.data.error); // ✅ string
+}
+```
+
+## Manual types: `TypedFetchUserEndpoints`
+
+Augment `TypedFetchUserEndpoints` to declare types for:
+- Endpoints you haven't observed yet.
+- Third-party APIs you don't own.
+- Endpoints with shapes you want to override.
+
+**User-defined entries take priority over generated ones.**
+
+```ts
+// src/typed-fetch.endpoints.d.ts
+declare module "@phumudzo/typed-fetch" {
+  interface TypedFetchUserEndpoints {
+    // Override the generated shape with a more precise type
+    "GET /users/:id": {
+      200: {
+        id: number;
+        name: string;
+        email: string;
+        role: "admin" | "user" | "guest";
+      };
+      404: { error: string };
+    };
+
+    // Declare a third-party API endpoint
+    "GET /repos/:owner/:repo": {
+      200: {
+        id: number;
+        name: string;
+        full_name: string;
+        stargazers_count: number;
+        html_url: string;
+      };
+      404: { message: string };
+    };
+  }
+}
+export {}; // make this a module
+```
+
+<Callout type="info">
+The `export {}` at the end is required to make the file a TypeScript module — without it the `declare module` block won't be picked up correctly.
+</Callout>
+
+## Priority order
+
+When both `TypedFetchUserEndpoints` and `TypedFetchGeneratedResponses` define types for the same key, **user-defined wins**:
+
+```
+TypedFetchUserEndpoints  >  TypedFetchGeneratedResponses
+```
+
+This lets you override generated shapes with more precise types (e.g. literal unions for status fields) without regenerating.
+
+## Autocomplete in IDEs
+
+Because `TypedEndpointKey` uses the `(string & {})` trick, IDEs list all known keys in the autocomplete dropdown while the input is still a `string` at runtime:
+
+```ts
+await typedFetch(url, undefined, {
+  endpointKey: "G|",
+  //            ^-- cursor here: IDE suggests "GET /users/:id", "GET /posts", …
+});
+```
+
+## Key mismatch warnings
+
+typed-fetch validates the endpoint key against the actual URL at runtime and emits a dev warning if they don't match:
+
+```
+[typed-fetch] endpointKey method "GET" does not match request method "POST"
+[typed-fetch] endpointKey "GET /users" has 1 path segment(s) but actual path "/users/1" has 2
+```
+
+These are warnings only — the request always proceeds.
+
+## Next: Caching
+
+Learn how to add [caching and deduplication](/docs/caching) to your endpoints.

@@ -1,65 +1,51 @@
 ---
 title: React Integration
-description: Using typed-fetch in React applications
+description: Using typed-fetch hooks in React applications
 icon: Atom
 ---
 
+import { Callout } from 'fumadocs-ui/components/callout';
+
 # React Integration
 
-Complete examples of using typed-fetch in React applications.
+Complete examples of using typed-fetch hooks in React applications.
 
-## Basic Hook
+<Callout type="info">
+For full API reference, see [React Hooks](/docs/react-hooks). This page focuses on practical, real-world patterns.
+</Callout>
 
-Create a custom hook to fetch data:
+## Setup
 
 ```tsx
-import { useState, useEffect } from 'react';
-import { typedFetch, TypedFetchResult } from '@phumudzo/typed-fetch';
+// main.tsx
+import { createTypedFetchCache } from "@phumudzo/typed-fetch";
+import { TypedFetchProvider } from "@phumudzo/typed-fetch/react";
 
-export function useFetch<K extends string>(
-  url: string,
-  endpointKey: K
-): {
-  result: TypedFetchResult<K> | null;
-  loading: boolean;
-  refetch: () => Promise<void>;
-} {
-  const [result, setResult] = useState<TypedFetchResult<K> | null>(null);
-  const [loading, setLoading] = useState(true);
+const cache = createTypedFetchCache({ staleTime: 60_000, gcTime: 5 * 60_000 });
 
-  const refetch = async () => {
-    setLoading(true);
-    const res = await typedFetch(url, { method: 'GET' }, { endpointKey });
-    setResult(res);
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    refetch();
-  }, [url, endpointKey]);
-
-  return { result, loading, refetch };
-}
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <TypedFetchProvider cache={cache}>
+      <App />
+    </TypedFetchProvider>
+  </StrictMode>,
+);
 ```
 
-## Component with Data Display
+## Basic data fetching
 
 ```tsx
-import { useFetch } from './hooks/useFetch';
+import { useTypedFetch } from "@phumudzo/typed-fetch/react";
 
-interface User {
-  id: number;
-  name: string;
-  email: string;
-}
-
-export function UserProfile({ userId }: { userId: number }) {
-  const { result, loading } = useFetch(
-    `/api/user/${userId}`,
-    'GET /user/:id'
+function UserProfile({ userId }: { userId: number }) {
+  const { result, isLoading, isError, error } = useTypedFetch(
+    `/api/users/${userId}`,
+    undefined,
+    { endpointKey: "GET /api/users/:id" },
   );
 
-  if (loading) return <div>Loading...</div>;
+  if (isLoading) return <div>Loading…</div>;
+  if (isError)   return <div>Network error: {error?.error.message}</div>;
 
   if (result?.status === 200) {
     return (
@@ -70,286 +56,258 @@ export function UserProfile({ userId }: { userId: number }) {
     );
   }
 
-  if (result?.status === 404) {
-    return <div>User not found</div>;
-  }
-
-  if (result?.status === 0) {
-    return <div>Network error: {result.error?.message}</div>;
-  }
-
+  if (result?.status === 404) return <div>User not found</div>;
   return <div>Error: {result?.status}</div>;
 }
 ```
 
-## POST Request with Form
+## Refetch and invalidation
 
 ```tsx
-import { useState } from 'react';
-import { typedFetch } from '@phumudzo/typed-fetch';
-
-export function CreateUserForm() {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    const formData = new FormData(e.currentTarget);
-    const name = formData.get('name') as string;
-    const email = formData.get('email') as string;
-
-    const result = await typedFetch(
-      '/api/user',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email })
-      },
-      { endpointKey: 'POST /user' }
-    );
-
-    setLoading(false);
-
-    if (result.status === 201) {
-      setSuccess(true);
-      e.currentTarget.reset();
-    } else if (result.status === 400) {
-      setError(result.data?.message || 'Validation error');
-    } else if (result.status === 0) {
-      setError(result.error?.message || 'Network error');
-    } else {
-      setError('Failed to create user');
-    }
-  };
-
-  if (success) {
-    return <div className="success">User created successfully!</div>;
-  }
+function PostCard({ id }: { id: number }) {
+  const { result, isLoading, isFetching, refetch, invalidate, invalidateEndpoint } =
+    useTypedFetch(`/api/posts/${id}`, undefined, { endpointKey: "GET /api/posts/:id" });
 
   return (
-    <form onSubmit={handleSubmit}>
-      <input name="name" type="text" placeholder="Name" required />
-      <input name="email" type="email" placeholder="Email" required />
-      <button disabled={loading}>
-        {loading ? 'Creating...' : 'Create User'}
-      </button>
-      {error && <div className="error">{error}</div>}
-    </form>
+    <article>
+      {isFetching && <span className="badge">Updating…</span>}
+      {result?.status === 200 && (
+        <>
+          <h2>{result.data.title}</h2>
+          <p>{result.data.body}</p>
+        </>
+      )}
+      <footer>
+        <button onClick={refetch}>Refresh this post</button>
+        <button onClick={invalidate}>Clear from cache</button>
+        <button onClick={invalidateEndpoint}>Clear all posts</button>
+      </footer>
+    </article>
   );
 }
 ```
 
-## List with Pagination
+## Dependent queries
 
 ```tsx
-import { useState, useEffect } from 'react';
-import { typedFetch } from '@phumudzo/typed-fetch';
+function PostComments({ postId }: { postId: number | null }) {
+  const { result } = useTypedFetch(
+    `/api/posts/${postId}/comments`,
+    undefined,
+    {
+      endpointKey: "GET /api/posts/:id/comments",
+      enabled: postId !== null,
+    },
+  );
 
-interface Post {
-  id: number;
-  title: string;
-  author: string;
+  if (!postId) return <p>Select a post to see comments.</p>;
+  if (result?.status === 200) {
+    return <ul>{result.data.map((c) => <li key={c.id}>{c.body}</li>)}</ul>;
+  }
+  return null;
 }
+```
 
-export function PostsList() {
-  const [posts, setPosts] = useState<Post[]>([]);
+## Pagination with `keepPreviousData`
+
+```tsx
+function PostsList() {
   const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const loadPosts = async () => {
-      setLoading(true);
-      const result = await typedFetch(
-        `/api/posts?page=${page}`,
-        { method: 'GET' },
-        { endpointKey: 'GET /posts' }
-      );
-
-      if (result.status === 200) {
-        setPosts(result.data.posts);
-      }
-      setLoading(false);
-    };
-
-    loadPosts();
-  }, [page]);
+  const { result, isFetching } = useTypedFetch(
+    `/api/posts?page=${page}&limit=10`,
+    undefined,
+    {
+      endpointKey: "GET /api/posts",
+      keepPreviousData: true, // keep showing page N while page N+1 loads
+    },
+  );
 
   return (
     <div>
-      <div className="posts">
-        {posts.map((post) => (
+      {isFetching && <p>Updating…</p>}
+      {result?.status === 200 &&
+        result.data.map((post) => (
           <article key={post.id}>
             <h2>{post.title}</h2>
-            <p>By {post.author}</p>
           </article>
         ))}
-      </div>
-      <div className="pagination">
-        <button
-          onClick={() => setPage(p => p - 1)}
-          disabled={page === 1 || loading}
-        >
-          Previous
-        </button>
-        <span>Page {page}</span>
-        <button
-          onClick={() => setPage(p => p + 1)}
-          disabled={loading}
-        >
-          Next
-        </button>
-      </div>
+      <button onClick={() => setPage((p) => p - 1)} disabled={page === 1}>
+        Previous
+      </button>
+      <span>Page {page}</span>
+      <button onClick={() => setPage((p) => p + 1)}>Next</button>
     </div>
   );
 }
 ```
 
-## Error Boundary Integration
+## Polling
 
 ```tsx
-import React, { ReactNode } from 'react';
+function StatusBanner() {
+  const { result } = useTypedFetch("/api/status", undefined, {
+    endpointKey: "GET /api/status",
+    refetchInterval: 10_000, // refetch every 10 seconds
+  });
 
-interface ErrorBoundaryProps {
-  children: ReactNode;
-}
-
-interface ErrorBoundaryState {
-  hasError: boolean;
-  error: Error | null;
-}
-
-export class ApiErrorBoundary extends React.Component<
-  ErrorBoundaryProps,
-  ErrorBoundaryState
-> {
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-
-  static getDerivedStateFromError(error: Error) {
-    return { hasError: true, error };
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return <div className="error">Something went wrong</div>;
-    }
-
-    return this.props.children;
-  }
-}
-
-// Usage:
-export function App() {
   return (
-    <ApiErrorBoundary>
-      <UserProfile userId={1} />
-    </ApiErrorBoundary>
+    <div>
+      {result?.status === 200
+        ? `System: ${result.data.status}`
+        : "Checking status…"}
+    </div>
   );
 }
 ```
 
-## Context for API Client
+## `select` — transform the result
 
 ```tsx
-import { createContext, useContext, ReactNode } from 'react';
-import { typedFetch } from '@phumudzo/typed-fetch';
-
-interface ApiContextType {
-  fetch: typeof typedFetch;
-  baseUrl: string;
-}
-
-const ApiContext = createContext<ApiContextType | null>(null);
-
-export function ApiProvider({
-  children,
-  baseUrl = '/api'
-}: {
-  children: ReactNode;
-  baseUrl?: string;
-}) {
-  return (
-    <ApiContext.Provider value={{ fetch: typedFetch, baseUrl }}>
-      {children}
-    </ApiContext.Provider>
+function UserName({ id }: { id: number }) {
+  // `result` is string | undefined — no status discrimination needed
+  const { result: name, isLoading } = useTypedFetch(
+    `/api/users/${id}`,
+    undefined,
+    {
+      endpointKey: "GET /api/users/:id",
+      select: (r) => (r.status === 200 ? r.data.name : null),
+    },
   );
+
+  if (isLoading) return <span>…</span>;
+  return <span>{name ?? "Unknown"}</span>;
 }
+```
 
-export function useApi() {
-  const context = useContext(ApiContext);
-  if (!context) {
-    throw new Error('useApi must be used within ApiProvider');
-  }
-  return context;
-}
+## POST with `useTypedMutation`
 
-// Usage:
-function MyComponent() {
-  const { fetch, baseUrl } = useApi();
+```tsx
+import { useTypedMutation } from "@phumudzo/typed-fetch/react";
 
-  const loadData = async () => {
-    const result = await fetch(
-      `${baseUrl}/data`,
-      { method: 'GET' },
-      { endpointKey: 'GET /data' }
-    );
+function CreateUserForm({ cache }: { cache: TypedFetchCache }) {
+  const { mutate, isLoading, isSuccess, isError, error, result, reset } =
+    useTypedMutation({
+      endpointKey: "POST /api/users",
+      onSuccess: () => {
+        // Bust the list so it refetches next time
+        cache.invalidateByEndpoint("GET /api/users");
+      },
+    });
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    mutate("/api/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: fd.get("name"), email: fd.get("email") }),
+    });
   };
 
-  return <button onClick={loadData}>Load Data</button>;
+  return (
+    <form onSubmit={handleSubmit}>
+      <input name="name" placeholder="Name" required />
+      <input name="email" type="email" placeholder="Email" required />
+      <button disabled={isLoading}>
+        {isLoading ? "Creating…" : "Create User"}
+      </button>
+      {isError  && <p>Network error: {error?.error.message}</p>}
+      {isSuccess && result?.status === 201 && (
+        <p>Created user #{result.data.id}!{" "}
+          <button type="button" onClick={reset}>Dismiss</button>
+        </p>
+      )}
+    </form>
+  );
 }
 ```
 
-## With Loading States & Skeletons
+## `mutateAsync` — navigate after success
 
 ```tsx
-import { useState, useEffect } from 'react';
-import { typedFetch } from '@phumudzo/typed-fetch';
+function CheckoutButton({ cart }: { cart: CartItem[] }) {
+  const navigate = useNavigate();
+  const { mutateAsync, isLoading } = useTypedMutation({
+    endpointKey: "POST /api/checkout",
+  });
 
-export function UserCard({ userId }: { userId: number }) {
-  const [result, setResult] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const handleCheckout = async () => {
+    const result = await mutateAsync("/api/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: cart }),
+    });
+    if (result.status === 200) {
+      navigate(`/orders/${result.data.orderId}`);
+    }
+  };
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      const res = await typedFetch(
-        `/api/user/${userId}`,
-        { method: 'GET' },
-        { endpointKey: 'GET /user/:id' }
-      );
-      setResult(res);
-      setLoading(false);
-    };
-
-    load();
-  }, [userId]);
-
-  if (loading) {
-    return (
-      <div className="card skeleton">
-        <div className="skeleton-line" />
-        <div className="skeleton-line" />
-      </div>
-    );
-  }
-
-  if (result?.status === 200) {
-    return (
-      <div className="card">
-        <h3>{result.data.name}</h3>
-        <p>{result.data.email}</p>
-      </div>
-    );
-  }
-
-  return <div className="card error">Failed to load</div>;
+  return (
+    <button onClick={handleCheckout} disabled={isLoading}>
+      {isLoading ? "Processing…" : "Checkout"}
+    </button>
+  );
 }
+```
+
+## `onSuccess` / `onError` callbacks
+
+```tsx
+const { mutate } = useTypedMutation({
+  endpointKey: "DELETE /api/users/:id",
+  onSuccess: (result) => {
+    if (result.status === 204) toast("User deleted");
+    cache.invalidateByEndpoint("GET /api/users");
+  },
+  onError: (err) => {
+    toast.error(`Network error: ${err.error.message}`);
+  },
+  onSettled: () => {
+    setConfirmOpen(false);
+  },
+});
+```
+
+## `initialData` — instant first render
+
+```tsx
+// Pass SSR-fetched data as initialData so the component renders immediately
+// without a loading state, even on the first visit.
+function UserCard({ id, serverUser }: { id: number; serverUser: User }) {
+  const { result } = useTypedFetch(
+    `/api/users/${id}`,
+    undefined,
+    {
+      endpointKey: "GET /api/users/:id",
+      initialData: { status: 200, ok: true, data: serverUser, response: null as any, endpoint: "GET /api/users/:id" },
+    },
+  );
+
+  if (result?.status === 200) return <h1>{result.data.name}</h1>;
+  return null;
+}
+```
+
+## Manual `TypedFetchUserEndpoints` declaration
+
+Declare types for endpoints before they've been observed, or to override generated types:
+
+```ts
+// src/typed-fetch.endpoints.d.ts
+declare module "@phumudzo/typed-fetch" {
+  interface TypedFetchUserEndpoints {
+    "GET /api/users/:id": {
+      200: { id: number; name: string; email: string; role: "admin" | "user" };
+      404: { error: string };
+    };
+    "POST /api/users": {
+      201: { id: number; name: string; email: string };
+      400: { error: string; fields: Record<string, string> };
+    };
+  }
+}
+export {};
 ```
 
 ## Next: Node.js Server Examples

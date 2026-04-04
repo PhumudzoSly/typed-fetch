@@ -32,16 +32,24 @@ typed-fetch eliminates manual type definitions for HTTP APIs while maintaining s
     description="Discriminated union types for HTTP status codes—type-safe error handling without try/catch blocks."
   />
   <Card
+    title="🗄️ Built-in Cache"
+    description="In-flight deduplication, stale-while-revalidate, GC, retry with back-off, and invalidation. Zero dependencies."
+  />
+  <Card
+    title="⚛️ React Hooks"
+    description="useTypedFetch, useTypedMutation, and TypedFetchProvider powered by useSyncExternalStore. Re-renders when cache updates."
+  />
+  <Card
+    title="🔌 Server Adapters"
+    description="Hono, Next.js App Router, and a generic adapter that auto-generate types from server-side responses in development."
+  />
+  <Card
     title="🌐 Works Everywhere"
     description="Seamless support for Node.js, browsers, and mixed client/server architectures with unified type generation."
   />
   <Card
     title="🚀 Never Throws"
     description="Network errors return result objects, never exceptions. Explicit error handling with full type safety."
-  />
-  <Card
-    title="📦 Zero Dependencies"
-    description="Lightweight core with no external runtime dependencies. Uses only native fetch and Node.js APIs."
   />
 </Cards>
 
@@ -75,14 +83,79 @@ Node.js 18+ is required.
 import { typedFetch } from '@phumudzo/typed-fetch';
 
 const result = await typedFetch(
-  'https://api.example.com/user/123',
+  'https://api.example.com/users/123',
   { method: 'GET' },
-  { endpointKey: 'GET /user/:id' }
+  { endpointKey: 'GET /users/:id' }
 );
 
 if (result.status === 200) {
-  console.log(result.data); // ✨ fully typed!
+  console.log(result.data); // ✨ fully typed after `typed-fetch generate`
 }
+```
+
+### With Caching
+
+```ts
+import { typedFetch, createTypedFetchCache } from '@phumudzo/typed-fetch';
+
+const cache = createTypedFetchCache({ staleTime: 60_000 });
+
+// First call — hits the network
+const r1 = await typedFetch('/users/1', undefined, {
+  endpointKey: 'GET /users/:id',
+  cache,
+});
+
+// Within staleTime — instant, no network request
+const r2 = await typedFetch('/users/1', undefined, {
+  endpointKey: 'GET /users/:id',
+  cache,
+});
+```
+
+### React Hooks
+
+```tsx
+import { createTypedFetchCache } from '@phumudzo/typed-fetch';
+import { TypedFetchProvider, useTypedFetch } from '@phumudzo/typed-fetch/react';
+
+const cache = createTypedFetchCache({ staleTime: 60_000 });
+
+function App() {
+  return (
+    <TypedFetchProvider cache={cache}>
+      <UserCard id={1} />
+    </TypedFetchProvider>
+  );
+}
+
+function UserCard({ id }: { id: number }) {
+  const { result, isLoading, isError, error } = useTypedFetch(
+    `/api/users/${id}`,
+    undefined,
+    { endpointKey: 'GET /api/users/:id' },
+  );
+
+  if (isLoading) return <p>Loading…</p>;
+  if (isError)   return <p>Error: {error?.error.message}</p>;
+  if (result?.status === 200) return <h1>{result.data.name}</h1>;
+  return null;
+}
+```
+
+### Server Adapters (auto type generation)
+
+```ts
+// Hono — one line covers all routes
+import { typedFetchObserver } from '@phumudzo/typed-fetch/adapters/hono';
+app.use('*', typedFetchObserver()); // dev-only, no-op in production
+
+// Next.js App Router
+import { withTypedFetchObserver } from '@phumudzo/typed-fetch/adapters/next';
+export const GET = withTypedFetchObserver(
+  'GET /api/users/:id',
+  async (req) => Response.json(await getUser(req)),
+);
 ```
 
 ### Generate Types
@@ -93,22 +166,7 @@ Run your app to collect observations, then:
 npx typed-fetch generate
 ```
 
-Generated `typed-fetch.d.ts` augments the global type registry with your API shapes.
-
-### Type-Safe Results
-
-```ts
-if (result.status === 200) {
-  // result.data is now fully typed based on observed responses
-  const name = result.data.name;
-  const email = result.data.email;
-} else if (result.status === 404) {
-  console.error('User not found');
-} else if (result.status === 0) {
-  // Network error
-  console.error('Network error:', result.error?.message);
-}
-```
+(With server adapters, types regenerate automatically on every request in dev.)
 
 ## Key Features Explained
 
@@ -121,39 +179,37 @@ const result = await typedFetch(...);
 
 // No try-catch needed!
 if (result.status === 0) {
-  // Network error
   handleNetworkError(result.error);
 } else if (!result.ok) {
-  // HTTP error
   handleHTTPError(result.status, result.data);
 } else {
-  // Success
   processData(result.data);
 }
 ```
 
-### Privacy by Default
+### Type-Safe Endpoint Keys
 
-- **No raw values stored**: Only response structure is recorded
-- **Strict privacy mode**: Raw paths not saved (default)
-- **Field filtering**: Sensitive fields automatically ignored
-- **Local storage**: All data stays in your project
+IDEs autocomplete all known endpoint keys from generated and user-declared types:
+
+```ts
+await typedFetch(url, undefined, {
+  endpointKey: "G|",
+  //            ^-- IDE suggests "GET /users/:id", "GET /posts", …
+});
+```
 
 ### Status-Based Type Narrowing
 
-TypeScript automatically narrows types based on status codes:
-
 ```ts
-const result = await typedFetch(...);
+const result = await typedFetch('/users/1', undefined, {
+  endpointKey: 'GET /users/:id',
+});
 
 if (result.status === 200) {
-  // TypeScript knows result.data shape for 200
-  result.data.property; // ✅ typed
+  result.data.name;  // ✅ typed as string
 }
-
 if (result.status === 404) {
-  // TypeScript knows result.data shape for 404
-  result.data?.message; // ✅ typed
+  result.data.error; // ✅ typed as string
 }
 ```
 
@@ -171,23 +227,23 @@ if (result.status === 404) {
     href="/docs/basic-usage"
   />
   <Card
-    title="⚙️ Configuration"
-    description="Customize typed-fetch behavior for your project"
-    href="/docs/configuration"
+    title="🗝️ Endpoint Keys"
+    description="Type-safe keys with autocomplete and manual declarations"
+    href="/docs/endpoint-keys"
   />
   <Card
-    title="📚 API Reference"
-    description="Complete TypeScript API documentation"
-    href="/docs/api-types"
+    title="🗄️ Caching"
+    description="In-memory cache with deduplication, stale-while-revalidate, and retry"
+    href="/docs/caching"
   />
   <Card
-    title="⚛️ React Examples"
-    description="Integration patterns for React applications"
-    href="/docs/examples-react"
+    title="⚛️ React Hooks"
+    description="useTypedFetch, useTypedMutation, TypedFetchProvider"
+    href="/docs/react-hooks"
   />
   <Card
-    title="🔧 Node.js Examples"
-    description="Server-side usage patterns and best practices"
-    href="/docs/examples-node"
+    title="🔌 Adapters"
+    description="Server-side type generation for Hono, Next.js, and more"
+    href="/docs/adapters"
   />
 </Cards>

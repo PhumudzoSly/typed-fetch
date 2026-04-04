@@ -1,0 +1,191 @@
+---
+title: Adapters
+description: Server-side observation for Hono, Next.js App Router, and any other framework
+icon: Plug
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+# Adapters
+
+Adapters let your **server** observe its own responses and auto-generate TypeScript types from real traffic — no manual schemas needed.
+
+Each adapter is a thin wrapper around [`observeResponse`](#generic-observeresponse) from `@phumudzo/typed-fetch/adapters/generic`.
+
+<Callout type="warn">
+Adapters are **development-only** — they check `process.env.NODE_ENV` and silently no-op in production, staging, or any other environment. You can deploy without removing them.
+</Callout>
+
+## How it works
+
+1. Your server handles a request and produces a `Response`.
+2. The adapter clones the response, infers the JSON shape, and writes it to the registry (`.typed-fetch/registry.json`).
+3. `generateTypes()` is called automatically (debounced 200 ms) to refresh the `.d.ts` file.
+4. On your next `typedFetch("GET /users/:id", ...)` call, TypeScript already knows the shape.
+
+---
+
+## Hono
+
+Register once with `app.use("*", ...)` to cover every route automatically.
+
+```ts
+import { Hono } from "hono";
+import { typedFetchObserver } from "@phumudzo/typed-fetch/adapters/hono";
+
+const app = new Hono();
+
+// One line covers every route
+app.use("*", typedFetchObserver());
+
+app.get("/users/:id", (c) => {
+  return c.json({ id: c.req.param("id"), name: "Alice" });
+});
+
+app.post("/users", async (c) => {
+  const body = await c.req.json();
+  return c.json({ id: 42, ...body }, 201);
+});
+
+export default app;
+```
+
+The middleware derives the endpoint key automatically from the matched route pattern: `GET /users/:id`, `POST /users`, etc.
+
+### Hono with custom config
+
+```ts
+app.use(
+  "*",
+  typedFetchObserver({
+    registryPath: ".typed-fetch/registry.json",
+    generatedPath: "src/generated/typed-fetch.d.ts",
+  }),
+);
+```
+
+---
+
+## Next.js App Router
+
+Wrap individual route handlers with `withTypedFetchObserver`. Provide the endpoint key explicitly — the route pattern is in the file-system path, not the handler.
+
+```ts
+// app/api/users/[id]/route.ts
+import { withTypedFetchObserver } from "@phumudzo/typed-fetch/adapters/next";
+
+export const GET = withTypedFetchObserver(
+  "GET /api/users/:id",
+  async (req) => {
+    const id = new URL(req.url).pathname.split("/").at(-1);
+    const user = await db.users.findUnique({ where: { id: Number(id) } });
+    if (!user) return Response.json({ error: "Not found" }, { status: 404 });
+    return Response.json(user);
+  },
+);
+```
+
+```ts
+// app/api/users/route.ts
+import { withTypedFetchObserver } from "@phumudzo/typed-fetch/adapters/next";
+
+export const POST = withTypedFetchObserver(
+  "POST /api/users",
+  async (req) => {
+    const body = await req.json();
+    const user = await db.users.create({ data: body });
+    return Response.json(user, { status: 201 });
+  },
+);
+```
+
+<Callout type="info">
+The adapter uses the Web `Request`/`Response` API only — no `next/server` import. It is compatible with both the Node.js and Edge runtimes.
+</Callout>
+
+---
+
+## Generic (`observeResponse`)
+
+Use `observeResponse` to build your own adapter for Express, Fastify, Bun, or any other framework. It accepts any standard Web API `Response` object.
+
+```ts
+import { observeResponse } from "@phumudzo/typed-fetch/adapters/generic";
+
+// Express example
+app.get("/users/:id", async (req, res) => {
+  const user = await db.users.findById(req.params.id);
+  const response = Response.json(user);
+
+  // Observe and auto-generate in dev, no-op in production
+  await observeResponse("GET /users/:id", response);
+
+  res.json(user);
+});
+```
+
+### Fastify example
+
+```ts
+import Fastify from "fastify";
+import { observeResponse } from "@phumudzo/typed-fetch/adapters/generic";
+
+const app = Fastify();
+
+app.addHook("onSend", async (request, reply, payload) => {
+  if (typeof payload === "string") {
+    const response = new Response(payload, {
+      status: reply.statusCode,
+      headers: { "content-type": reply.getHeader("content-type") as string },
+    });
+    await observeResponse(
+      `${request.method} ${request.routeOptions.url}`,
+      response,
+    );
+  }
+});
+```
+
+### `observeResponse` signature
+
+```ts
+function observeResponse(
+  endpointKey: string,       // "METHOD /path/:param"
+  response: Response,        // cloned internally — safe to read after the call
+  config?: Partial<TypedFetchConfig>,
+): Promise<void>;
+```
+
+- Non-JSON responses are silently skipped.
+- Never throws — observation failures never block response handling.
+- No-op when `NODE_ENV !== "development"` or `observerMode` is `"none"` / `"http"`.
+
+---
+
+## When to use adapters vs client-side observation
+
+| Scenario | Recommendation |
+|----------|----------------|
+| You own both server and client (Hono, Next.js, etc.) | Use an adapter on the server — types reflect the actual API contract |
+| Calling a third-party API you don't control | Let `typedFetch` observe client-side (default behaviour) |
+| Browser-only app (Vite, CRA) | Client-side observation via `typedFetch` is enough |
+| Node.js script / CLI | Client-side `typedFetch` or `observeResponse` inline |
+
+---
+
+## Auto type generation
+
+All adapters call `generateTypes()` automatically (debounced 200 ms after the registry is flushed). You don't need to run `typed-fetch generate` manually during development — just make requests and types appear.
+
+To trigger generation manually:
+
+```bash
+npx typed-fetch generate
+```
+
+---
+
+## Next: Examples
+
+See the [React examples](/docs/examples-react) for a full end-to-end integration.

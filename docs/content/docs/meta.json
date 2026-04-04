@@ -10,11 +10,17 @@
     "---Core Concepts---",
     "api-types",
     "result-object",
+    "endpoint-keys",
+    "caching",
     "config-schema",
     "privacy",
     "browser-support",
-    "---Examples---",
+    "---React---",
+    "react-hooks",
     "examples-react",
+    "---Adapters---",
+    "adapters",
+    "---Examples---",
     "examples-node",
     "examples-errors"
   ]
