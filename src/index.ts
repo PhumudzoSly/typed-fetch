@@ -1,4 +1,4 @@
-export { default, tFetch, typedFetch } from "./tFetch";
+export { default, tFetch, typedFetch, isNetworkError } from "./tFetch";
 export type {
   TypedFetchResult,
   TypedFetchNetworkError,

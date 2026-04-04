@@ -32,7 +32,7 @@
  */
 
 import * as React from "react";
-import { typedFetch } from "./tFetch";
+import { typedFetch, isNetworkError } from "./tFetch";
 import type { TypedFetchResult, TypedFetchNetworkError, TypedFetchOptions, TypedEndpointKey } from "./tFetch";
 import type { TypedFetchCache } from "./cache";
 import type { TypedFetchConfig, TypedFetchRequestInit } from "./core/types";
@@ -270,8 +270,8 @@ export function useTypedFetch<
       },
     ).then((result) => {
       if (controller.signal.aborted) return;
-      if (result.status === 0) {
-        callbacksRef.current.onError?.(result as TypedFetchNetworkError<K>);
+      if (isNetworkError(result)) {
+        callbacksRef.current.onError?.(result);
       } else {
         callbacksRef.current.onSuccess?.(result);
       }
@@ -372,18 +372,16 @@ export function useTypedFetch<
       ? options.select(rawResult)
       : (rawResult as unknown as TSelected | undefined);
 
-  const isNetworkError =
-    rawResult !== undefined && (rawResult as TypedFetchNetworkError<K>).status === 0;
+  const networkError =
+    rawResult !== undefined && isNetworkError(rawResult) ? rawResult : undefined;
 
   return {
     result: selectedResult,
     isLoading: rawResult === undefined && enabled,
     isFetching: state.isFetching,
-    isSuccess: rawResult !== undefined && !isNetworkError && rawResult.ok === true,
-    isError: isNetworkError,
-    error: isNetworkError
-      ? (rawResult as unknown as TypedFetchNetworkError<K>)
-      : undefined,
+    isSuccess: rawResult !== undefined && networkError === undefined && rawResult.ok === true,
+    isError: networkError !== undefined,
+    error: networkError,
     refetch,
     invalidate,
     invalidateEndpoint,
@@ -487,8 +485,8 @@ export function useTypedMutation<K extends TypedEndpointKey = TypedEndpointKey>(
 
       setState({ result, isLoading: false });
 
-      if ((result as TypedFetchNetworkError<K>).status === 0) {
-        callbacksRef.current.onError?.(result as TypedFetchNetworkError<K>);
+      if (isNetworkError(result)) {
+        callbacksRef.current.onError?.(result);
       } else {
         callbacksRef.current.onSuccess?.(result);
       }
@@ -512,17 +510,17 @@ export function useTypedMutation<K extends TypedEndpointKey = TypedEndpointKey>(
   }, []);
 
   const { result, isLoading } = state;
-  const isNetworkError =
-    result !== undefined && (result as TypedFetchNetworkError<K>).status === 0;
+  const mutationNetworkError =
+    result !== undefined && isNetworkError(result) ? result : undefined;
 
   return {
     mutate,
     mutateAsync,
     result,
     isLoading,
-    isSuccess: result !== undefined && !isNetworkError && result.ok === true,
-    isError: isNetworkError,
-    error: isNetworkError ? (result as unknown as TypedFetchNetworkError<K>) : undefined,
+    isSuccess: result !== undefined && mutationNetworkError === undefined && result.ok === true,
+    isError: mutationNetworkError !== undefined,
+    error: mutationNetworkError,
     reset,
   };
 }
