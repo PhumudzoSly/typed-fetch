@@ -11,10 +11,10 @@ Complete reference for all TypeScript types exported by typed-fetch.
 ## Main Export: `typedFetch`
 
 ```ts
-export async function typedFetch<K extends string>(
-  url: string | URL,
+export async function typedFetch<K extends TypedEndpointKey>(
+  input: RequestInfo | URL,
   init?: RequestInit,
-  options?: TypedFetchOptions<K>,
+  options: TypedFetchOptions<K>,
 ): Promise<TypedFetchResult<K>>;
 ```
 
@@ -22,13 +22,13 @@ export async function typedFetch<K extends string>(
 
 ### Parameters
 
-#### `url`
+#### `input`
 
-The URL to fetch. Can be a string or URL object:
+The URL to fetch. Can be a string, URL object, or Request:
 
 ```ts
-await typedFetch('https://api.example.com/user/1', ...);
-await typedFetch(new URL('/api/user/1', baseUrl), ...);
+await typedFetch("https://api.example.com/users/1", ...);
+await typedFetch(new URL("/api/users/1", baseUrl), ...);
 ```
 
 #### `init` (optional)
@@ -52,141 +52,166 @@ await typedFetch(
 typed-fetch specific options:
 
 ```ts
-interface TypedFetchOptions<K extends string> {
+interface TypedFetchOptions<K extends TypedEndpointKey> {
+  /** Required. Endpoint pattern, e.g. "GET /users/:id". */
   endpointKey: K;
+  /** Optional config overrides. */
+  config?: Partial<TypedFetchConfig>;
+  /** Path to a typed-fetch config file. */
+  configPath?: string;
+  /** Optional cache for deduplication, stale-while-revalidate, and retry. */
+  cache?: TypedFetchCache;
 }
 ```
 
-- **`endpointKey`** (required): Unique identifier for the endpoint
-  - Format: `METHOD /path/:param`
-  - Examples: `GET /user/:id`, `POST /user`, `PATCH /comment/:id`
+## `TypedEndpointKey`
 
-## Return Type: TypedFetchResult
+The type accepted by `endpointKey`. IDEs suggest all known keys while still allowing any string:
 
 ```ts
-type TypedFetchResult<K extends string> =
-  | TypedFetchSuccess<K>
-  | TypedFetchError;
+export type TypedEndpointKey = KnownEndpointKey | (string & {});
+//                              ^-- auto-completed  ^-- any string accepted
 ```
 
-### TypedFetchSuccess Type
+Known keys come from `TypedFetchGeneratedResponses` (auto-generated) and `TypedFetchUserEndpoints` (manual declarations).
 
-Returned when the request completes (regardless of HTTP status):
+## Return Type: `TypedFetchResult`
 
 ```ts
-interface TypedFetchSuccess<K extends string> {
-  status: number; // HTTP status code (200, 404, 500, etc.)
-  ok: boolean; // true if status is 200-208 or 226
-  endpoint: K; // The endpointKey you provided
-  data: any; // Parsed JSON response (typed after generate)
+type TypedFetchResult<K extends TypedEndpointKey> =
+  | TypedFetchNetworkError<K>
+  | (K extends KnownEndpointKey
+      ? KnownEndpointResult<K>   // per-status typed via discriminated union
+      : { status: number; ok: boolean; data: unknown; response: Response });
+```
+
+### On success (any HTTP response including 4xx/5xx)
+
+```ts
+{
+  endpoint: K;        // The endpointKey you provided
+  status: number;     // HTTP status code (200, 404, 500, …)
+  ok: boolean;        // true if status is 2xx (200–208, 226)
+  data: unknown;      // Parsed JSON body (typed after generate)
   response: Response; // Original Response object
-  error: undefined;
+  error?: undefined;
 }
 ```
 
-### TypedFetchError
-
-Returned only on network errors (status === 0):
+### On network error (`status === 0`)
 
 ```ts
-interface TypedFetchError {
-  status: 0;
+export type TypedFetchNetworkError<K extends TypedEndpointKey> = {
+  endpoint: K;
+  status: 0;          // Always 0 — no HTTP response received
   ok: false;
-  endpoint: undefined;
   data: undefined;
-  response: undefined;
-  error: Error; // Network error details
-}
+  response: null;
+  error: Error;       // Network error details
+};
 ```
 
 ## Discriminated Unions
 
-The result type is designed for discriminated unions based on status:
+The result type is designed for discriminated unions based on `status`:
 
 ```ts
-const result = await typedFetch(url, init, { endpointKey });
+const result = await typedFetch(url, init, { endpointKey: "GET /users/:id" });
 
 if (result.status === 200) {
-  // result.data is typed for 200 status
+  // result.data is typed for the 200 shape
   console.log(result.data.name);
 } else if (result.status === 404) {
-  // result.data is typed for 404 status
-  console.log(result.data?.message);
+  console.log(result.data.error);
 } else if (result.status === 0) {
   // Network error
-  console.error(result.error);
-} else {
-  // Other status codes
+  console.error(result.error.message);
 }
 ```
 
 ## Generated Types: `TypedFetchGeneratedResponses`
 
-After running `npx typed-fetch generate`, a module augmentation is created:
+After running `npx typed-fetch generate`, a `.d.ts` file augments this interface:
 
 ```ts
+// src/generated/typed-fetch.d.ts  (auto-generated — do not edit)
 declare module "@phumudzo/typed-fetch" {
   interface TypedFetchGeneratedResponses {
-    "GET /user/:id": {
-      200: {
-        id: number;
-        name: string;
-        email: string;
-      };
+    "GET /users/:id": {
+      200: { id: number; name: string; email: string };
       404: null;
-      500: {
-        error: string;
-      };
     };
-    "POST /user": {
-      201: {
-        id: number;
-      };
-      400: {
-        message: string;
-      };
+    "POST /users": {
+      201: { id: number };
+      400: { message: string };
     };
   }
 }
 ```
 
-Once generated, your result types are fully typed:
+## Manual Types: `TypedFetchUserEndpoints`
+
+Augment this interface to declare types for endpoints you haven't observed yet, or to override generated types. **User-defined entries take priority over generated ones.**
 
 ```ts
-const result = await typedFetch(url, init, {
-  endpointKey: "GET /user/:id",
+// src/typed-fetch.endpoints.d.ts
+declare module "@phumudzo/typed-fetch" {
+  interface TypedFetchUserEndpoints {
+    "GET /users/:id": {
+      200: { id: number; name: string; email: string; role: "admin" | "user" };
+      404: { error: string };
+    };
+    // Third-party API without observation
+    "GET /repos/:owner/:repo": {
+      200: { id: number; name: string; stargazers_count: number };
+      404: { message: string };
+    };
+  }
+}
+export {};
+```
+
+## Caching: `TypedFetchCache` and `CacheOptions`
+
+```ts
+export type CacheOptions = {
+  staleTime?: number;                           // default: 0
+  gcTime?: number;                              // default: 300_000 (5 min)
+  retry?: number | false;                       // default: 3
+  retryDelay?: (attempt: number) => number;     // default: exponential
+};
+
+export class TypedFetchCache {
+  buildKey(input: RequestInfo | URL, method: string): string;
+  get<T>(key: string): { result: T; fetchedAt: number; endpointKey: string } | undefined;
+  isStale(entry: { fetchedAt: number }): boolean;
+  set<T>(key: string, result: T, endpointKey: string): void;
+  getInFlight<T>(key: string): Promise<T> | undefined;
+  setInFlight<T>(key: string, promise: Promise<T>): void;
+  clearInFlight(key: string): void;
+  subscribe(key: string, cb: () => void): () => void;
+  invalidate(input: RequestInfo | URL, method?: string): void;
+  invalidateByEndpoint(endpointKey: string): void;
+  invalidateAll(): void;
+  destroy(): void;
+}
+
+export function createTypedFetchCache(options?: CacheOptions): TypedFetchCache;
+```
+
+## Client: `createTypedFetchClient`
+
+```ts
+const client = createTypedFetchClient({
+  baseUrl: "https://api.example.com",
+  config?: Partial<TypedFetchConfig>;
+  cache?: TypedFetchCache; // optional — applied to every request
 });
 
-if (result.status === 200) {
-  // TypeScript knows result.data has shape { id, name, email }
-  const userId = result.data.id;
-}
-```
-
-## Export: `TypedFetchResult`
-
-You can import the result type for annotations:
-
-```ts
-import { typedFetch, TypedFetchResult } from "@phumudzo/typed-fetch";
-
-function handleResult(result: TypedFetchResult<"GET /user/:id">) {
-  if (result.status === 200) {
-    console.log(result.data.name);
-  }
-}
-```
-
-## Export: `TypedFetchOptions`
-
-For advanced use cases:
-
-```ts
-import { typedFetch, TypedFetchOptions } from "@phumudzo/typed-fetch";
-
-const options: TypedFetchOptions<"GET /data"> = {
-  endpointKey: "GET /data",
-};
+const result = await client.fetch("/users/1", undefined, {
+  endpointKey: "GET /users/:id",
+  cache?, // per-call override
+});
 ```
 
 ## Adapter Exports
@@ -242,85 +267,30 @@ export function withTypedFetchObserver(
 ### Status-based narrowing
 
 ```ts
-const result = await typedFetch(url, init, { endpointKey });
-
 if (result.status === 200) {
   // result.data is typed for 200
 }
-// result.data is not available here
 ```
 
 ### Error checking
 
 ```ts
 if (result.status === 0) {
-  // Network error
-  console.error(result.error);
+  console.error(result.error);     // Error object
 } else if (result.ok) {
-  // Successful status (200-208, 226)
-  console.log(result.data);
+  console.log(result.data);        // 2xx typed data
 } else {
-  // HTTP error (4xx, 5xx, etc)
+  console.log(result.status);      // 4xx / 5xx
 }
 ```
 
-### Response object access
+### Function return type annotation
 
 ```ts
-const result = await typedFetch(url, init, { endpointKey });
+import type { TypedFetchResult } from "@phumudzo/typed-fetch";
 
-if (result.status !== 0) {
-  // Access the original Response object
-  const headers = result.response.headers;
-  const text = await result.response.text();
-}
-```
-
-## Examples
-
-### Simple GET request
-
-```ts
-import { typedFetch } from "@phumudzo/typed-fetch";
-
-const result = await typedFetch(
-  "https://api.example.com/user/123",
-  { method: "GET" },
-  { endpointKey: "GET /user/:id" },
-);
-
-if (result.status === 200) {
-  return result.data;
-}
-```
-
-### POST with body
-
-```ts
-const result = await typedFetch(
-  "https://api.example.com/user",
-  {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: "John" }),
-  },
-  { endpointKey: "POST /user" },
-);
-```
-
-### Type annotation for function return
-
-```ts
-import { TypedFetchResult } from "@phumudzo/typed-fetch";
-
-export async function getUser(
-  id: number,
-): Promise<TypedFetchResult<"GET /user/:id">> {
-  return typedFetch(
-    `/api/user/${id}`,
-    { method: "GET" },
-    { endpointKey: "GET /user/:id" },
-  );
+async function getUser(id: number): Promise<TypedFetchResult<"GET /users/:id">> {
+  return typedFetch(`/api/users/${id}`, undefined, { endpointKey: "GET /users/:id" });
 }
 ```
 

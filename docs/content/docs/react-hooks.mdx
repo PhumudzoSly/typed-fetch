@@ -1,0 +1,302 @@
+---
+title: React Hooks
+description: useTypedFetch, useTypedMutation, and TypedFetchProvider for React 18+
+icon: Atom
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+# React Hooks
+
+typed-fetch ships first-class React hooks powered by `useSyncExternalStore` (React 18+). Components re-render automatically whenever the cache updates — no polling, no manual subscriptions.
+
+```bash
+# React is an optional peer dependency
+pnpm add react@^18
+```
+
+<Callout type="info">
+Import from `@phumudzo/typed-fetch/react`. React is an optional peer dependency — nothing from this subpath is imported unless you use it.
+</Callout>
+
+## Setup
+
+Create a cache and wrap your app with `TypedFetchProvider`:
+
+```tsx
+// main.tsx
+import { createTypedFetchCache } from "@phumudzo/typed-fetch";
+import { TypedFetchProvider } from "@phumudzo/typed-fetch/react";
+
+const cache = createTypedFetchCache({
+  staleTime: 60_000,  // 60 s
+  gcTime: 5 * 60_000, // 5 min
+});
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <TypedFetchProvider cache={cache}>
+      <App />
+    </TypedFetchProvider>
+  </StrictMode>,
+);
+```
+
+## `useTypedFetch`
+
+Fetches data, caches the result, and re-renders when it changes.
+
+```tsx
+import { useTypedFetch } from "@phumudzo/typed-fetch/react";
+
+function UserCard({ id }: { id: number }) {
+  const { result, isLoading, isError, error, refetch } = useTypedFetch(
+    `/api/users/${id}`,
+    undefined,
+    { endpointKey: "GET /api/users/:id" },
+  );
+
+  if (isLoading) return <p>Loading…</p>;
+  if (isError)   return <p>Network error: {error?.error.message}</p>;
+  if (result?.status === 200) return <h1>{result.data.name}</h1>;
+  if (result?.status === 404) return <p>User not found</p>;
+  return null;
+}
+```
+
+### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `endpointKey` | `TypedEndpointKey` | required | Endpoint pattern. Autocompletes from all known keys. |
+| `enabled` | `boolean` | `true` | When `false` the fetch is skipped. Use for dependent queries. |
+| `refetchInterval` | `number \| false` | — | Poll interval in ms. |
+| `keepPreviousData` | `boolean` | `false` | Return the last key's data while the new key loads. Ideal for pagination. |
+| `initialData` | `TypedFetchResult<K>` | — | Seed the cache before the first render — no network call if provided. |
+| `select` | `(result) => TSelected` | — | Transform or pick a subset from the result. |
+| `onSuccess` | `(result) => void` | — | Called after every non-network-error response (including 4xx). |
+| `onError` | `(error) => void` | — | Called on network error (`status === 0`). |
+| `onSettled` | `(result) => void` | — | Called after every completed fetch. |
+| `refetchOnWindowFocus` | `boolean` | `true` | Refetch stale entries when the tab regains focus. |
+| `refetchOnReconnect` | `boolean` | `true` | Refetch when the browser comes back online. |
+| `cache` | `TypedFetchCache` | ctx cache | Override the Provider cache for this hook. |
+| `config` | `Partial<TypedFetchConfig>` | — | typed-fetch config overrides. |
+
+### Return values
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `result` | `TSelected \| undefined` | Cached result, or `select()` return value. `undefined` while loading. |
+| `isLoading` | `boolean` | `true` when no result exists and fetch is enabled. |
+| `isFetching` | `boolean` | `true` while any request is in-flight for this key. |
+| `isSuccess` | `boolean` | `true` when `result.ok === true` (2xx status). |
+| `isError` | `boolean` | `true` on network error (`status === 0`). |
+| `error` | `TypedFetchNetworkError<K> \| undefined` | Full network error object when `isError` is `true`. |
+| `refetch` | `() => void` | Invalidate + immediately re-fetch. |
+| `invalidate` | `() => void` | Remove this URL from cache (no auto re-fetch). |
+| `invalidateEndpoint` | `() => void` | Remove all cached URLs for this endpoint key. |
+
+### Dependent queries
+
+Use `enabled` to wait for a required value before fetching:
+
+```tsx
+function PostComments({ postId }: { postId: number | null }) {
+  const { result, isLoading } = useTypedFetch(
+    `/api/posts/${postId}/comments`,
+    undefined,
+    {
+      endpointKey: "GET /api/posts/:id/comments",
+      enabled: postId !== null, // skip until postId is known
+    },
+  );
+
+  if (!postId)    return <p>Select a post first.</p>;
+  if (isLoading)  return <p>Loading comments…</p>;
+  if (result?.status === 200) {
+    return <ul>{result.data.map(c => <li key={c.id}>{c.body}</li>)}</ul>;
+  }
+  return null;
+}
+```
+
+### Pagination with `keepPreviousData`
+
+```tsx
+function PostsList() {
+  const [page, setPage] = useState(1);
+
+  const { result, isFetching } = useTypedFetch(
+    `/api/posts?page=${page}`,
+    undefined,
+    {
+      endpointKey: "GET /api/posts",
+      keepPreviousData: true, // show previous page while next page loads
+    },
+  );
+
+  return (
+    <div>
+      {isFetching && <span>Updating…</span>}
+      {result?.status === 200 &&
+        result.data.map((p) => <article key={p.id}>{p.title}</article>)}
+      <button onClick={() => setPage((p) => p - 1)} disabled={page === 1}>Prev</button>
+      <button onClick={() => setPage((p) => p + 1)}>Next</button>
+    </div>
+  );
+}
+```
+
+### Polling
+
+```tsx
+const { result } = useTypedFetch("/api/status", undefined, {
+  endpointKey: "GET /api/status",
+  refetchInterval: 5_000, // poll every 5 s
+});
+```
+
+### `select` — transform the result
+
+```tsx
+const { result: userName } = useTypedFetch(
+  `/api/users/${id}`,
+  undefined,
+  {
+    endpointKey: "GET /api/users/:id",
+    select: (r) => (r.status === 200 ? r.data.name : undefined),
+  },
+);
+// result is string | undefined — no status discrimination needed
+```
+
+### Invalidation from a hook
+
+```tsx
+function UserCard({ id }: { id: number }) {
+  const { result, refetch, invalidate, invalidateEndpoint } = useTypedFetch(
+    `/api/users/${id}`,
+    undefined,
+    { endpointKey: "GET /api/users/:id" },
+  );
+
+  return (
+    <div>
+      {result?.status === 200 && <p>{result.data.name}</p>}
+      <button onClick={refetch}>Refresh</button>
+      <button onClick={invalidate}>Clear this user</button>
+      <button onClick={invalidateEndpoint}>Clear all users</button>
+    </div>
+  );
+}
+```
+
+---
+
+## `useTypedMutation`
+
+Manages a single mutation (POST, PUT, PATCH, DELETE). Mutations always hit the network — no caching.
+
+```tsx
+import { useTypedMutation } from "@phumudzo/typed-fetch/react";
+
+function CreateUserForm() {
+  const { mutate, isLoading, isSuccess, isError, error, result, reset } =
+    useTypedMutation({
+      endpointKey: "POST /api/users",
+      onSuccess: () => {
+        // Invalidate the user list so it refetches
+        cache.invalidateByEndpoint("GET /api/users");
+      },
+      onError: (err) => console.error(err.error.message),
+    });
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    mutate("/api/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: fd.get("name") }),
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input name="name" required />
+      <button disabled={isLoading}>
+        {isLoading ? "Saving…" : "Create"}
+      </button>
+      {isError  && <p>Error: {error?.error.message}</p>}
+      {isSuccess && result?.status === 201 && (
+        <p>Created user #{result.data.id}</p>
+      )}
+      {(isSuccess || isError) && (
+        <button type="button" onClick={reset}>Reset</button>
+      )}
+    </form>
+  );
+}
+```
+
+### Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `endpointKey` | `TypedEndpointKey` | required |
+| `onSuccess` | `(result) => void` | Called after non-network-error response. |
+| `onError` | `(error) => void` | Called on network error (`status === 0`). |
+| `onSettled` | `(result) => void` | Called after every mutation. |
+| `config` | `Partial<TypedFetchConfig>` | typed-fetch config overrides. |
+
+### Return values
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `mutate` | `(url, init?) => void` | Fire and forget. |
+| `mutateAsync` | `(url, init?) => Promise<result>` | Fire and await. |
+| `result` | `TypedFetchResult<K> \| undefined` | Latest result. |
+| `isLoading` | `boolean` | In-flight. |
+| `isSuccess` | `boolean` | `ok === true` (2xx). |
+| `isError` | `boolean` | Network error. |
+| `error` | `TypedFetchNetworkError<K> \| undefined` | Network error details. |
+| `reset` | `() => void` | Clear result and flags. |
+
+### `mutateAsync` — await the result
+
+```tsx
+const { mutateAsync } = useTypedMutation({ endpointKey: "POST /api/checkout" });
+
+async function checkout() {
+  const result = await mutateAsync("/api/checkout", {
+    method: "POST",
+    body: JSON.stringify(cart),
+  });
+  if (result.status === 200) {
+    navigate(`/orders/${result.data.orderId}`);
+  }
+}
+```
+
+---
+
+## `TypedFetchProvider`
+
+Provides a `TypedFetchCache` to all hooks in the subtree via React context.
+
+```tsx
+import { TypedFetchProvider } from "@phumudzo/typed-fetch/react";
+
+<TypedFetchProvider cache={cache}>
+  <App />
+</TypedFetchProvider>
+```
+
+Every `useTypedFetch` and `useTypedMutation` in the tree reads the cache from context. You can override it per-hook with `options.cache`.
+
+---
+
+## Next: Adapters
+
+Learn how to use [server-side adapters](/docs/adapters) to observe responses from Hono, Next.js, or any other framework.
