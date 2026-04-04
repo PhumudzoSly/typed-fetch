@@ -4,6 +4,7 @@ import { loadConfig } from "./core/config";
 import { shouldTrackEndpoint } from "./core/filter";
 import { normalizeEndpointKey } from "./core/normalize";
 import { inferShape } from "./core/shape";
+import type { TypedFetchCache } from "./cache";
 import type {
   EndpointKey,
   ShapeNode,
@@ -124,9 +125,44 @@ function isOkStatus(status: number): status is TypedFetchSuccessStatuses {
   );
 }
 
+/**
+ * Augmented by the generated `.d.ts` file (`typed-fetch generate`).
+ * Do not edit manually — use `TypedFetchUserEndpoints` for manual additions.
+ */
 export interface TypedFetchGeneratedResponses {}
 
-type KnownEndpointKey = keyof TypedFetchGeneratedResponses & string;
+/**
+ * Augment this interface to manually declare endpoint response types for
+ * routes that haven't been observed yet or that live outside your codebase.
+ * Entries here take precedence over `TypedFetchGeneratedResponses`.
+ *
+ * @example
+ * // typed-fetch.endpoints.d.ts
+ * declare module "@phumudzo/typed-fetch" {
+ *   interface TypedFetchUserEndpoints {
+ *     "POST /users": {
+ *       201: { id: number; name: string };
+ *       400: { error: string };
+ *     };
+ *     "DELETE /users/:id": { 204: void; 404: { error: string } };
+ *   }
+ * }
+ */
+export interface TypedFetchUserEndpoints {}
+
+// All endpoints known at compile time — user-defined win over generated.
+type AllEndpoints = TypedFetchUserEndpoints & TypedFetchGeneratedResponses;
+
+// Union of every known endpoint key (from generated types + user-defined).
+type KnownEndpointKey = keyof AllEndpoints & string;
+
+/**
+ * The type used for `endpointKey` throughout typed-fetch.
+ * IDEs will suggest all known keys from `TypedFetchGeneratedResponses` and
+ * `TypedFetchUserEndpoints` in autocomplete; any valid string is still accepted.
+ */
+export type TypedEndpointKey = KnownEndpointKey | (string & {});
+
 type StatusLike = number | `${number}`;
 
 type ToNumericStatus<S extends StatusLike> = S extends number
@@ -135,18 +171,26 @@ type ToNumericStatus<S extends StatusLike> = S extends number
     ? N
     : number;
 
+// User-defined endpoints take priority; fall back to generated.
+type ResponseMapFor<K extends KnownEndpointKey> =
+  K extends keyof TypedFetchUserEndpoints
+    ? TypedFetchUserEndpoints[K]
+    : K extends keyof TypedFetchGeneratedResponses
+      ? TypedFetchGeneratedResponses[K]
+      : never;
+
 type KnownEndpointResult<K extends KnownEndpointKey> = {
-  [S in keyof TypedFetchGeneratedResponses[K]]: {
+  [S in keyof ResponseMapFor<K>]: {
     endpoint: K;
     status: ToNumericStatus<S & StatusLike>;
     ok: ToNumericStatus<S & StatusLike> extends TypedFetchSuccessStatuses
       ? true
       : false;
-    data: TypedFetchGeneratedResponses[K][S];
+    data: ResponseMapFor<K>[S];
     response: Response;
     error?: undefined;
   };
-}[keyof TypedFetchGeneratedResponses[K]];
+}[keyof ResponseMapFor<K>];
 
 /**
  * Returned when the network request itself fails before an HTTP response
@@ -155,7 +199,7 @@ type KnownEndpointResult<K extends KnownEndpointKey> = {
  * Discriminate from a normal result by checking `result.error` or
  * `result.status === 0`.
  */
-export type TypedFetchNetworkError<K extends EndpointKey = EndpointKey> = {
+export type TypedFetchNetworkError<K extends TypedEndpointKey = TypedEndpointKey> = {
   endpoint: K;
   /** Always 0 for network errors — no HTTP response was received. */
   status: 0;
@@ -165,7 +209,7 @@ export type TypedFetchNetworkError<K extends EndpointKey = EndpointKey> = {
   error: Error;
 };
 
-export type TypedFetchResult<K extends EndpointKey = EndpointKey> =
+export type TypedFetchResult<K extends TypedEndpointKey = TypedEndpointKey> =
   | TypedFetchNetworkError<K>
   | (K extends KnownEndpointKey
       ? KnownEndpointResult<K>
@@ -178,10 +222,20 @@ export type TypedFetchResult<K extends EndpointKey = EndpointKey> =
           error?: undefined;
         });
 
-type TypedFetchOptions<K extends EndpointKey> = {
+export type TypedFetchOptions<K extends TypedEndpointKey> = {
   endpointKey: K;
   config?: Partial<TypedFetchConfig>;
   configPath?: string;
+  /**
+   * Optional cache instance. When provided:
+   * - Concurrent requests to the same URL share one in-flight promise.
+   * - Fresh entries (`age < staleTime`) are returned without hitting the network.
+   * - Failed network requests (`status === 0`) are retried automatically.
+   *
+   * Create a cache with `createTypedFetchCache()` and share it across calls
+   * or pass it to `createTypedFetchClient` to apply it globally.
+   */
+  cache?: TypedFetchCache;
 };
 
 /**
@@ -211,11 +265,56 @@ type TypedFetchOptions<K extends EndpointKey> = {
  *   console.log(result.data); // typed as the 200 response shape
  * }
  */
-export async function typedFetch<K extends EndpointKey = EndpointKey>(
+export async function typedFetch<K extends TypedEndpointKey = TypedEndpointKey>(
   input: RequestInfo | URL,
   init: TypedFetchRequestInit | undefined,
   options: TypedFetchOptions<K>,
 ): Promise<TypedFetchResult<K>> {
+  // ── Cache layer ────────────────────────────────────────────────────────────
+  const { cache } = options;
+
+  if (cache) {
+    const method = (init?.method ?? "GET").toUpperCase();
+    const cacheKey = cache.buildKey(input, method);
+
+    // 1. Deduplicate: return the existing in-flight promise.
+    const inFlight = cache.getInFlight<TypedFetchResult<K>>(cacheKey);
+    if (inFlight) return inFlight;
+
+    // 2. Serve from cache if the entry is still fresh.
+    const entry = cache.get<TypedFetchResult<K>>(cacheKey);
+    if (entry && !cache.isStale(entry)) return entry.result;
+
+    // 3. Fetch with retry. Call self without cache to run the real fetch path.
+    const optionsWithoutCache: TypedFetchOptions<K> = { ...options, cache: undefined };
+    const maxRetries = typeof cache.retry === "number" ? cache.retry : 0;
+
+    const fetchWithRetry = async (): Promise<TypedFetchResult<K>> => {
+      let lastResult: TypedFetchResult<K> | undefined;
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        const result = await typedFetch(input, init, optionsWithoutCache);
+        lastResult = result;
+        if (result.status !== 0) return result; // success or HTTP error — stop
+        if (attempt < maxRetries) {
+          await new Promise<void>((r) => setTimeout(r, cache.retryDelay(attempt)));
+        }
+      }
+      return lastResult!;
+    };
+
+    const fetchPromise = fetchWithRetry()
+      .then((result) => {
+        // Never cache network errors — they should be retried next time.
+        if (result.status !== 0) cache.set(cacheKey, result, options.endpointKey);
+        return result;
+      })
+      .finally(() => cache.clearInFlight(cacheKey));
+
+    cache.setInFlight(cacheKey, fetchPromise);
+    return fetchPromise;
+  }
+  // ── End cache layer ────────────────────────────────────────────────────────
+
   const config = loadConfig(options?.config, {
     configPath: options?.configPath,
   });
@@ -324,11 +423,12 @@ export async function typedFetch<K extends EndpointKey = EndpointKey>(
  *
  * @see typedFetch
  */
-export function tFetch<K extends EndpointKey = EndpointKey>(
+export function tFetch<K extends TypedEndpointKey = TypedEndpointKey>(
   input: RequestInfo | URL,
   init: TypedFetchRequestInit | undefined,
   options: TypedFetchOptions<K>,
 ): Promise<TypedFetchResult<K>> {
+  // tFetch is a simple alias — all cache/retry logic lives in typedFetch.
   return typedFetch(input, init, options);
 }
 

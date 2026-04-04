@@ -9,6 +9,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "default": "./dist/react.js"
+    },
     "./adapters/generic": {
       "types": "./dist/adapters/generic.d.ts",
       "default": "./dist/adapters/generic.js"
@@ -23,10 +27,14 @@
     }
   },
   "peerDependencies": {
-    "hono": ">=3"
+    "hono": ">=3",
+    "react": ">=18"
   },
   "peerDependenciesMeta": {
     "hono": {
+      "optional": true
+    },
+    "react": {
       "optional": true
     }
   },
@@ -74,6 +82,7 @@
   "devDependencies": {
     "@types/node": "^22.13.14",
     "@types/picomatch": "^4.0.3",
+    "@types/react": "^18.0.0",
     "typescript": "^5.8.2"
   }
 }
