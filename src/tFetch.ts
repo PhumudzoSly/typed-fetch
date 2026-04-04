@@ -222,6 +222,26 @@ export type TypedFetchResult<K extends TypedEndpointKey = TypedEndpointKey> =
           error?: undefined;
         });
 
+/**
+ * Type guard that narrows a `TypedFetchResult<K>` to `TypedFetchNetworkError<K>`.
+ *
+ * Network errors always have `status === 0` and an `error` field. Use this
+ * instead of `as TypedFetchNetworkError<K>` casts to preserve type safety.
+ *
+ * @example
+ * const result = await typedFetch(url, init, { endpointKey: "GET /users/:id" });
+ * if (isNetworkError(result)) {
+ *   console.error(result.error.message); // TypeScript knows result is TypedFetchNetworkError
+ * } else {
+ *   console.log(result.data);
+ * }
+ */
+export function isNetworkError<K extends TypedEndpointKey>(
+  result: TypedFetchResult<K>,
+): result is TypedFetchNetworkError<K> {
+  return result.status === 0;
+}
+
 export type TypedFetchOptions<K extends TypedEndpointKey> = {
   endpointKey: K;
   config?: Partial<TypedFetchConfig>;
@@ -340,7 +360,7 @@ export async function typedFetch<K extends TypedEndpointKey = TypedEndpointKey>(
   try {
     response = await fetchFunction(input, init);
   } catch (fetchError) {
-    return {
+    const networkError: TypedFetchNetworkError<K> = {
       endpoint: options.endpointKey,
       status: 0,
       ok: false,
@@ -350,7 +370,8 @@ export async function typedFetch<K extends TypedEndpointKey = TypedEndpointKey>(
         fetchError instanceof Error
           ? fetchError
           : new Error(String(fetchError)),
-    } as TypedFetchNetworkError<K> as TypedFetchResult<K>;
+    };
+    return networkError;
   }
 
   let data: unknown = undefined;

@@ -1,6 +1,6 @@
 {
   "name": "@phumudzo/typed-fetch",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Privacy-first status-aware typed fetch with type generation from response shapes",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -43,7 +43,7 @@
     "README.md"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "bin": {
     "typed-fetch": "dist/cli.js"
@@ -83,6 +83,9 @@
     "@types/node": "^22.13.14",
     "@types/picomatch": "^4.0.3",
     "@types/react": "^18.0.0",
+    "@types/react-test-renderer": "^18.0.0",
+    "react": "^18.3.1",
+    "react-test-renderer": "^18.3.1",
     "typescript": "^5.8.2"
   }
 }
