@@ -145,8 +145,8 @@ export function inferShape(
         continue;
       }
 
-      const optional = fieldValue === undefined || undefined;
-      const nullable = fieldValue === null || undefined;
+      const optional = fieldValue === undefined ? true : undefined;
+      const nullable = fieldValue === null ? true : undefined;
       fields[fieldName] = {
         shape: inferShape(fieldValue, config, depth + 1),
         optional,
