@@ -1,11 +1,14 @@
 {
     "compilerOptions": {
-        "target": "es6",
+        "target": "es2020",
+        "lib": ["es2020", "dom", "dom.iterable"],
+        "types": ["node"],
         "module": "commonjs",
         "strict": true,
         "esModuleInterop": true,
         "skipLibCheck": true,
         "forceConsistentCasingInFileNames": true,
+        "rootDir": "./src",
         "outDir": "./dist",
         "declaration": true,
         "declarationMap": true,

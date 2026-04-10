@@ -310,7 +310,7 @@ export async function typedFetch<K extends TypedEndpointKey = TypedEndpointKey>(
     const maxRetries = typeof cache.retry === "number" ? cache.retry : 0;
 
     const fetchWithRetry = async (): Promise<TypedFetchResult<K>> => {
-      let lastResult: TypedFetchResult<K> | undefined;
+      let lastResult: TypedFetchResult<K> | null = null;
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         const result = await typedFetch(input, init, optionsWithoutCache);
         lastResult = result;
@@ -319,7 +319,8 @@ export async function typedFetch<K extends TypedEndpointKey = TypedEndpointKey>(
           await new Promise<void>((r) => setTimeout(r, cache.retryDelay(attempt)));
         }
       }
-      return lastResult!;
+      // lastResult is always assigned: maxRetries >= 0 guarantees at least one iteration
+      return lastResult as TypedFetchResult<K>;
     };
 
     const fetchPromise = fetchWithRetry()

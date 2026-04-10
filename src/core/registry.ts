@@ -246,13 +246,18 @@ export function mergeRegistryInto(
   incoming: Registry,
 ): Registry {
   for (const [endpointKey, endpoint] of Object.entries(incoming.endpoints)) {
+    const observedAt = endpoint.meta.lastSeenAt
+      ? new Date(endpoint.meta.lastSeenAt)
+      : undefined;
+    const paths = endpoint.meta.observedPaths ?? [];
     for (const [statusKey, shape] of Object.entries(endpoint.responses)) {
-      observeShape({
-        registry: target,
-        endpointKey,
-        status: Number(statusKey),
-        shape,
-      });
+      if (paths.length > 0) {
+        for (const rawPath of paths) {
+          observeShape({ registry: target, endpointKey, status: Number(statusKey), shape, observedAt, rawPath });
+        }
+      } else {
+        observeShape({ registry: target, endpointKey, status: Number(statusKey), shape, observedAt });
+      }
     }
   }
   return target;
