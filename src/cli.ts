@@ -1,21 +1,18 @@
 #!/usr/bin/env node
+import { join } from "node:path";
 import { Command } from "commander";
 import pc from "picocolors";
-import { join } from "path";
-import { loadConfig, getDefaultConfig } from "./core/config";
-import { checkTypes, cleanArtifacts, generateTypes } from "./generator";
+import { getDefaultConfig, loadConfig } from "./core/config";
+import { createObserverServer } from "./core/http-observer-server";
 import {
   loadRegistry,
   mergeRegistryIntoPath,
-  observeManyToRegistryPath,
   parseRegistryJson,
 } from "./core/registry";
-import type { ShapeNode } from "./core/types";
+import { checkTypes, cleanArtifacts, generateTypes } from "./generator";
 
 function stripJsonComments(raw: string): string {
-  return raw
-    .replace(/\/\/[^\n]*/g, "")
-    .replace(/\/\*[\s\S]*?\*\//g, "");
+  return raw.replace(/\/\/[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
 }
 
 type TsConfig = {
@@ -24,11 +21,15 @@ type TsConfig = {
   extends?: string;
 };
 
-function detectGeneratedPath(): { generatedPath: string; detected: boolean; source: string } {
+function detectGeneratedPath(): {
+  generatedPath: string;
+  detected: boolean;
+  source: string;
+} {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const fs = require("fs") as typeof import("fs");
+  const fs = require("node:fs") as typeof import("fs");
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const path = require("path") as typeof import("path");
+  const path = require("node:path") as typeof import("path");
 
   const NON_APP = /(node|server|scripts|worker|test|spec)/i;
 
@@ -105,7 +106,11 @@ function detectGeneratedPath(): { generatedPath: string; detected: boolean; sour
       const root = sourceRootFromIncludes(cfg.include);
       if (root !== null) {
         const prefix = root === "" ? "" : `${root}/`;
-        return { generatedPath: `${prefix}generated/typed-fetch.d.ts`, detected: true, source: name };
+        return {
+          generatedPath: `${prefix}generated/typed-fetch.d.ts`,
+          detected: true,
+          source: name,
+        };
       }
     }
   }
@@ -116,17 +121,25 @@ function detectGeneratedPath(): { generatedPath: string; detected: boolean; sour
     const root = sourceRootFromIncludes(resolved.include);
     if (root !== null) {
       const prefix = root === "" ? "" : `${root}/`;
-      return { generatedPath: `${prefix}generated/typed-fetch.d.ts`, detected: true, source: resolved.source };
+      return {
+        generatedPath: `${prefix}generated/typed-fetch.d.ts`,
+        detected: true,
+        source: resolved.source,
+      };
     }
   }
 
-  return { generatedPath: "src/generated/typed-fetch.d.ts", detected: false, source: "default" };
+  return {
+    generatedPath: "src/generated/typed-fetch.d.ts",
+    detected: false,
+    source: "default",
+  };
 }
 
 function readCliVersion(): string {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const fs = require("fs") as typeof import("fs");
+    const fs = require("node:fs") as typeof import("fs");
     const packageJsonPath = join(__dirname, "..", "package.json");
     const parsed = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as {
       version?: string;
@@ -143,10 +156,14 @@ function readCliVersion(): string {
 function initProject(
   force: boolean,
   configPath?: string,
-): { configPath: string; created: boolean; detection: ReturnType<typeof detectGeneratedPath> } {
+): {
+  configPath: string;
+  created: boolean;
+  detection: ReturnType<typeof detectGeneratedPath>;
+} {
   const targetPath = configPath ?? "typed-fetch.config.json";
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const fs = require("fs") as typeof import("fs");
+  const fs = require("node:fs") as typeof import("fs");
 
   const detection = detectGeneratedPath();
 
@@ -248,9 +265,7 @@ async function run(): Promise<void> {
     .option("--config <path>", "Path to config file")
     .action((options: { config?: string }) => {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const fs = require("fs") as typeof import("fs");
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const http = require("http") as typeof import("http");
+      const fs = require("node:fs") as typeof import("fs");
       const config = loadConfig({}, { configPath: options.config });
       const registryPath = config.registryPath;
       const observerPort = config.observerPort;
@@ -291,88 +306,44 @@ async function run(): Promise<void> {
           return;
         }
 
-        fs.watch(registryPath, scheduleRegen);
+        let watcher: ReturnType<typeof fs.watch> | null = null;
+        try {
+          watcher = fs.watch(registryPath, (eventType) => {
+            if (eventType === "rename") {
+              // File was deleted or moved — close this watcher and re-poll.
+              watcher?.close();
+              watcher = null;
+              setTimeout(startWatcher, 500);
+              return;
+            }
+            scheduleRegen();
+          });
+          watcher.on("error", () => {
+            watcher?.close();
+            watcher = null;
+            setTimeout(startWatcher, 500);
+          });
+        } catch {
+          // fs.watch can throw synchronously (e.g. ENOENT race on some platforms).
+          setTimeout(startWatcher, 500);
+        }
       }
 
       startWatcher();
 
       // HTTP observer server — receives observations from browser runtimes.
-      const server = http.createServer((req, res) => {
-        res.setHeader("Access-Control-Allow-Origin", "*");
-        res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-        res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-        if (req.method === "OPTIONS") {
-          res.writeHead(204);
-          res.end();
-          return;
-        }
-
-        if (req.method === "POST" && req.url === "/__typed-fetch/observe") {
-          const MAX_BODY_BYTES = 1_048_576; // 1 MB — guards against runaway clients
-          let body = "";
-          let bodyBytes = 0;
-          let oversized = false;
-
-          req.on("error", () => {
-            if (!res.headersSent) { res.writeHead(400); res.end(); }
-          });
-
-          req.on("data", (chunk: Buffer) => {
-            bodyBytes += chunk.length;
-            if (bodyBytes > MAX_BODY_BYTES) {
-              oversized = true;
-              req.destroy();
-              if (!res.headersSent) { res.writeHead(413); res.end(); }
-              return;
-            }
-            body += chunk.toString();
-          });
-          req.on("end", () => {
-            if (oversized) return;
-            try {
-              const obs = JSON.parse(body) as {
-                endpointKey: string;
-                status: number;
-                shape: ShapeNode;
-                observedAt: string;
-                rawPath?: string;
-              };
-              observeManyToRegistryPath({
-                registryPath,
-                observations: [
-                  {
-                    endpointKey: obs.endpointKey,
-                    status: obs.status,
-                    shape: obs.shape,
-                    observedAt: new Date(obs.observedAt),
-                    rawPath: obs.rawPath,
-                  },
-                ],
-              });
-              scheduleRegen();
-              res.writeHead(204);
-              res.end();
-            } catch {
-              res.writeHead(400);
-              res.end();
-            }
-          });
-          return;
-        }
-
-        res.writeHead(404);
-        res.end();
-      });
+      const server = createObserverServer(registryPath, scheduleRegen);
 
       server.on("error", (err: NodeJS.ErrnoException) => {
         if (err.code === "EADDRINUSE") {
           process.stderr.write(
             `${pc.red("[typed-fetch]")} Port ${observerPort} is already in use.\n` +
-            `Set a different port with "observerPort" in your typed-fetch config.\n`,
+              `Set a different port with "observerPort" in your typed-fetch config.\n`,
           );
         } else {
-          process.stderr.write(`${pc.red("[typed-fetch] Watch server error:")} ${err.message}\n`);
+          process.stderr.write(
+            `${pc.red("[typed-fetch] Watch server error:")} ${err.message}\n`,
+          );
         }
         process.exit(1);
       });
@@ -414,7 +385,7 @@ async function run(): Promise<void> {
     .option("--output <path>", "Write to a file instead of stdout")
     .action((options: { config?: string; output?: string }) => {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const fs = require("fs") as typeof import("fs");
+      const fs = require("node:fs") as typeof import("fs");
       const config = loadConfig({}, { configPath: options.config });
       const registry = loadRegistry(config.registryPath);
       const json = `${JSON.stringify(registry, null, 2)}\n`;
@@ -437,7 +408,7 @@ async function run(): Promise<void> {
     .option("--config <path>", "Path to config file")
     .action((file: string, options: { config?: string }) => {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const fs = require("fs") as typeof import("fs");
+      const fs = require("node:fs") as typeof import("fs");
       if (!fs.existsSync(file)) {
         process.stderr.write(`${pc.red("File not found")}: ${file}\n`);
         process.exit(1);
