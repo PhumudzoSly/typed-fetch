@@ -22,6 +22,10 @@ function createOutput(): vscode.OutputChannel {
   return vscode.window.createOutputChannel("Typed Fetch Tools");
 }
 
+function getConfigPath(): string | undefined {
+  return vscode.workspace.getConfiguration("typedFetchTools").get("configPath");
+}
+
 async function runCommand(
   command: string,
   cwd: string,
@@ -29,6 +33,23 @@ async function runCommand(
 ): Promise<void> {
   output.appendLine(`> ${command}`);
   const { stdout, stderr } = await execAsync(command, { cwd });
+  if (stdout) output.appendLine(stdout.trimEnd());
+  if (stderr) output.appendLine(stderr.trimEnd());
+}
+
+async function runCLICommand(
+  cmd: string,
+  cwd: string,
+  output: vscode.OutputChannel,
+  configPath?: string,
+): Promise<void> {
+  // Append --config if provided and not already in command
+  const fullCmd = configPath && !cmd.includes("--config")
+    ? `${cmd} --config "${configPath}"`
+    : cmd;
+
+  output.appendLine(`> ${fullCmd}`);
+  const { stdout, stderr } = await execAsync(fullCmd, { cwd });
   if (stdout) output.appendLine(stdout.trimEnd());
   if (stderr) output.appendLine(stderr.trimEnd());
 }
@@ -46,7 +67,8 @@ async function generateTypes(output: vscode.OutputChannel): Promise<void> {
   }
 
   try {
-    await runCommand("npx typed-fetch generate", root, output);
+    const configPath = getConfigPath();
+    await runCLICommand("./node_modules/.bin/typed-fetch generate", root, output, configPath);
     vscode.window.showInformationMessage("Typed Fetch: types generated.");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -61,12 +83,14 @@ function startWatch(): void {
     return;
   }
 
+  const configPath = getConfigPath();
+  const configFlag = configPath ? ` --config "${configPath}"` : "";
   const terminal = vscode.window.createTerminal({
     name: "Typed Fetch Watch",
     cwd: root,
   });
   terminal.show();
-  terminal.sendText("npx typed-fetch watch");
+  terminal.sendText(`./node_modules/.bin/typed-fetch watch${configFlag}`);
 }
 
 async function runCurrentFileAndGenerate(output: vscode.OutputChannel): Promise<void> {
@@ -150,13 +174,67 @@ class TypedFetchHoverProvider implements vscode.HoverProvider {
   }
 }
 
+async function initProject(output: vscode.OutputChannel): Promise<void> {
+  const root = getWorkspaceRoot();
+  if (!root) {
+    vscode.window.showErrorMessage("No workspace folder open.");
+    return;
+  }
+
+  try {
+    const configPath = getConfigPath();
+    await runCLICommand("./node_modules/.bin/typed-fetch init", root, output, configPath);
+    vscode.window.showInformationMessage("Typed Fetch: project initialized.");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    showFailure(`Typed Fetch init failed: ${message}`, output);
+  }
+}
+
+async function checkTypes(output: vscode.OutputChannel): Promise<void> {
+  const root = getWorkspaceRoot();
+  if (!root) {
+    vscode.window.showErrorMessage("No workspace folder open.");
+    return;
+  }
+
+  try {
+    const configPath = getConfigPath();
+    await runCLICommand("./node_modules/.bin/typed-fetch check", root, output, configPath);
+    vscode.window.showInformationMessage("Typed Fetch: check complete.");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    showFailure(`Typed Fetch check failed: ${message}`, output);
+  }
+}
+
+async function cleanArtifacts(output: vscode.OutputChannel): Promise<void> {
+  const root = getWorkspaceRoot();
+  if (!root) {
+    vscode.window.showErrorMessage("No workspace folder open.");
+    return;
+  }
+
+  try {
+    const configPath = getConfigPath();
+    await runCLICommand("./node_modules/.bin/typed-fetch clean", root, output, configPath);
+    vscode.window.showInformationMessage("Typed Fetch: artifacts cleaned.");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    showFailure(`Typed Fetch clean failed: ${message}`, output);
+  }
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   const output = createOutput();
   output.appendLine("Typed Fetch Tools active");
 
   context.subscriptions.push(
     output,
+    vscode.commands.registerCommand("typedFetch.init", () => initProject(output)),
     vscode.commands.registerCommand("typedFetch.generate", () => generateTypes(output)),
+    vscode.commands.registerCommand("typedFetch.check", () => checkTypes(output)),
+    vscode.commands.registerCommand("typedFetch.clean", () => cleanArtifacts(output)),
     vscode.commands.registerCommand("typedFetch.watch", () => startWatch()),
     vscode.commands.registerCommand("typedFetch.runAndGenerate", () => runCurrentFileAndGenerate(output)),
     vscode.languages.registerCodeLensProvider(
