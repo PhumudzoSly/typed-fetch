@@ -32,10 +32,14 @@
  */
 
 import * as React from "react";
-import { typedFetch, isNetworkError } from "./tFetch";
-import type { TypedFetchResult, TypedFetchNetworkError, TypedFetchOptions, TypedEndpointKey } from "./tFetch";
 import type { TypedFetchCache } from "./cache";
 import type { TypedFetchConfig, TypedFetchRequestInit } from "./core/types";
+import type {
+  TypedEndpointKey,
+  TypedFetchNetworkError,
+  TypedFetchResult,
+} from "./tFetch";
+import { isNetworkError, typedFetch } from "./tFetch";
 
 // ─── Context ──────────────────────────────────────────────────────────────────
 
@@ -58,7 +62,11 @@ export function TypedFetchProvider({
   cache: TypedFetchCache;
   children: React.ReactNode;
 }): React.ReactElement {
-  return React.createElement(TypedFetchContext.Provider, { value: cache }, children);
+  return React.createElement(
+    TypedFetchContext.Provider,
+    { value: cache },
+    children,
+  );
 }
 
 // ─── useTypedFetch ────────────────────────────────────────────────────────────
@@ -233,7 +241,8 @@ export function useTypedFetch<
     const rawResult = cache.get<TypedFetchResult<K>>(cacheKey)?.result;
     const isFetching = cache.getInFlight(cacheKey) !== undefined;
     const prev = snapshotRef.current;
-    if (prev.rawResult === rawResult && prev.isFetching === isFetching) return prev;
+    if (prev.rawResult === rawResult && prev.isFetching === isFetching)
+      return prev;
     snapshotRef.current = { rawResult, isFetching };
     return snapshotRef.current;
   }, [cache, cacheKey]);
@@ -248,8 +257,11 @@ export function useTypedFetch<
   );
 
   // ── keepPreviousData ──────────────────────────────────────────────────────
-  const previousResultRef = React.useRef<TypedFetchResult<K> | undefined>(undefined);
-  if (state.rawResult !== undefined) previousResultRef.current = state.rawResult;
+  const previousResultRef = React.useRef<TypedFetchResult<K> | undefined>(
+    undefined,
+  );
+  if (state.rawResult !== undefined)
+    previousResultRef.current = state.rawResult;
 
   const rawResult: TypedFetchResult<K> | undefined =
     state.rawResult ??
@@ -277,7 +289,13 @@ export function useTypedFetch<
     typedFetch<K>(
       inputRef.current,
       currentInit
-        ? { ...currentInit, signal: controller.signal }
+        ? {
+            ...currentInit,
+            signal:
+              currentInit.signal && typeof AbortSignal.any === "function"
+                ? AbortSignal.any([controller.signal, currentInit.signal])
+                : controller.signal,
+          }
         : { signal: controller.signal },
       {
         endpointKey: callbacksRef.current.endpointKey,
@@ -295,8 +313,8 @@ export function useTypedFetch<
     });
 
     return () => controller.abort();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cacheKey, enabled]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, cache]);
 
   // ── Polling ───────────────────────────────────────────────────────────────
   React.useEffect(() => {
@@ -313,8 +331,8 @@ export function useTypedFetch<
     }, interval);
 
     return () => clearInterval(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cacheKey, options.refetchInterval, enabled]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options.refetchInterval, enabled, cache, method]);
 
   // ── Window focus refetch ──────────────────────────────────────────────────
   React.useEffect(() => {
@@ -335,8 +353,15 @@ export function useTypedFetch<
 
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cacheKey, options.refetchOnWindowFocus, enabled]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    cacheKey,
+    options.refetchOnWindowFocus,
+    enabled,
+    cache.isStale,
+    cache.get,
+    cache,
+  ]);
 
   // ── Network reconnect refetch ─────────────────────────────────────────────
   React.useEffect(() => {
@@ -354,22 +379,22 @@ export function useTypedFetch<
 
     window.addEventListener("online", handleOnline);
     return () => window.removeEventListener("online", handleOnline);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cacheKey, options.refetchOnReconnect, enabled]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options.refetchOnReconnect, enabled, cache]);
 
   // ── invalidate / refetch ──────────────────────────────────────────────────
 
   /** Remove this exact URL from the cache (no re-fetch). */
   const invalidate = React.useCallback(() => {
     cache.invalidate(input, method);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cache, cacheKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cache, method, input]);
 
   /** Remove all URLs for this endpoint key pattern (no re-fetch). */
   const invalidateEndpoint = React.useCallback(() => {
     cache.invalidateByEndpoint(callbacksRef.current.endpointKey);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cache, options.endpointKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cache]);
 
   /** Invalidate this exact URL and immediately re-fetch. */
   const refetch = React.useCallback(() => {
@@ -379,23 +404,30 @@ export function useTypedFetch<
       config: callbacksRef.current.config,
       cache,
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cache, cacheKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cache, method]);
 
   // ── Derived values ────────────────────────────────────────────────────────
   const selectedResult =
     rawResult !== undefined && options.select
       ? options.select(rawResult)
-      : (rawResult as unknown as TSelected | undefined);
+      : // When `select` is not provided, TSelected defaults to TypedFetchResult<K>,
+        // so rawResult already satisfies TSelected — the single cast is sound.
+        (rawResult as TSelected | undefined);
 
   const networkError =
-    rawResult !== undefined && isNetworkError(rawResult) ? rawResult : undefined;
+    rawResult !== undefined && isNetworkError(rawResult)
+      ? rawResult
+      : undefined;
 
   return {
     result: selectedResult,
     isLoading: rawResult === undefined && enabled,
     isFetching: state.isFetching,
-    isSuccess: rawResult !== undefined && networkError === undefined && rawResult.ok === true,
+    isSuccess:
+      rawResult !== undefined &&
+      networkError === undefined &&
+      rawResult.ok === true,
     isError: networkError !== undefined,
     error: networkError,
     refetch,
@@ -534,7 +566,10 @@ export function useTypedMutation<K extends TypedEndpointKey = TypedEndpointKey>(
     mutateAsync,
     result,
     isLoading,
-    isSuccess: result !== undefined && mutationNetworkError === undefined && result.ok === true,
+    isSuccess:
+      result !== undefined &&
+      mutationNetworkError === undefined &&
+      result.ok === true,
     isError: mutationNetworkError !== undefined,
     error: mutationNetworkError,
     reset,
