@@ -1,8 +1,8 @@
-import { queueRegistryObservation } from "../core/file-observer";
 import { loadConfig } from "../core/config";
+import { queueRegistryObservation } from "../core/file-observer";
 import { inferShape } from "../core/shape";
-import { generateTypes } from "../generator";
 import type { TypedFetchConfig } from "../core/types";
+import { generateTypes } from "../generator";
 
 function isJsonContentType(contentType: string | null): boolean {
   return Boolean(contentType?.toLowerCase().includes("application/json"));
@@ -12,10 +12,18 @@ function isJsonContentType(contentType: string | null): boolean {
 // so the registry is fully written before we read it back for generation.
 let _generateTimer: ReturnType<typeof setTimeout> | null = null;
 
-function scheduleGenerate(
-  registryPath: string,
-  generatedPath: string,
-): void {
+/**
+ * Cancel a pending auto-regeneration timer, if any.
+ * Useful in tests to prevent timer leaks across test cases.
+ */
+export function cancelScheduledGenerate(): void {
+  if (_generateTimer) {
+    clearTimeout(_generateTimer);
+    _generateTimer = null;
+  }
+}
+
+function scheduleGenerate(registryPath: string, generatedPath: string): void {
   if (_generateTimer) clearTimeout(_generateTimer);
   _generateTimer = setTimeout(() => {
     _generateTimer = null;
@@ -83,7 +91,10 @@ export async function observeResponse(
     });
 
     // Auto-regenerate the .d.ts after the registry flush settles.
-    scheduleGenerate(effectiveConfig.registryPath, effectiveConfig.generatedPath);
+    scheduleGenerate(
+      effectiveConfig.registryPath,
+      effectiveConfig.generatedPath,
+    );
   } catch {
     // Observation and generation failures must never block response handling.
   }
