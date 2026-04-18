@@ -49,7 +49,10 @@ test("default retryDelay applies exponential back-off capped at 30 s", () => {
 
 test("buildKey with string URL", () => {
   const cache = createTypedFetchCache();
-  assert.equal(cache.buildKey("https://example.com/users", "GET"), "GET:https://example.com/users");
+  assert.equal(
+    cache.buildKey("https://example.com/users", "GET"),
+    "GET:https://example.com/users",
+  );
 });
 
 test("buildKey with URL object", () => {
@@ -61,12 +64,18 @@ test("buildKey with URL object", () => {
 test("buildKey with Request object", () => {
   const cache = createTypedFetchCache();
   const req = new Request("https://example.com/items");
-  assert.equal(cache.buildKey(req, "DELETE"), "DELETE:https://example.com/items");
+  assert.equal(
+    cache.buildKey(req, "DELETE"),
+    "DELETE:https://example.com/items",
+  );
 });
 
 test("buildKey normalises method to uppercase", () => {
   const cache = createTypedFetchCache();
-  assert.equal(cache.buildKey("https://example.com/x", "get"), "GET:https://example.com/x");
+  assert.equal(
+    cache.buildKey("https://example.com/x", "get"),
+    "GET:https://example.com/x",
+  );
 });
 
 // ─── get / set ───────────────────────────────────────────────────────────────
@@ -169,7 +178,8 @@ test("unsubscribe stops future notifications", () => {
 
 test("multiple subscribers for the same key all receive notifications", () => {
   const cache = createTypedFetchCache();
-  let a = 0, b = 0;
+  let a = 0,
+    b = 0;
   cache.subscribe("k1", () => a++);
   cache.subscribe("k1", () => b++);
   cache.set("k1", {}, "GET /x");
@@ -184,7 +194,10 @@ test("invalidate removes the entry for the given URL+method", () => {
   const cache = createTypedFetchCache();
   cache.set(cache.buildKey("https://example.com/u", "GET"), {}, "GET /u");
   cache.invalidate("https://example.com/u", "GET");
-  assert.equal(cache.get(cache.buildKey("https://example.com/u", "GET")), undefined);
+  assert.equal(
+    cache.get(cache.buildKey("https://example.com/u", "GET")),
+    undefined,
+  );
 });
 
 test("invalidate notifies subscribers", () => {

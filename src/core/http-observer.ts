@@ -20,14 +20,11 @@ export function postObservationToServer(args: {
   // Fire-and-forget: `.catch` handles async rejections (e.g. server not running).
   // The outer try-catch handles the rare case where fetch() throws synchronously.
   try {
-    fetch(
-      `http://localhost:${args.observerPort}/__typed-fetch/observe`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(args.observation),
-      },
-    ).catch(() => undefined);
+    fetch(`http://localhost:${args.observerPort}/__typed-fetch/observe`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(args.observation),
+    }).catch(() => undefined);
   } catch {
     // Observer server may not be running — never break request flow.
   }

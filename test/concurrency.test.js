@@ -10,10 +10,12 @@ const { loadRegistry } = require("../dist/core/registry");
 
 function startServer() {
   const server = http.createServer((req, res) => {
-    if (req.url && req.url.startsWith("/concurrency/") && req.method === "GET") {
+    if (req.url?.startsWith("/concurrency/") && req.method === "GET") {
       res.statusCode = 200;
       res.setHeader("content-type", "application/json");
-      res.end(JSON.stringify({ ok: true, id: Number(req.url.split("/").pop()) || 0 }));
+      res.end(
+        JSON.stringify({ ok: true, id: Number(req.url.split("/").pop()) || 0 }),
+      );
       return;
     }
 
@@ -36,7 +38,9 @@ function startServer() {
 
 test("typedFetch file observer preserves high-volume observations", async () => {
   const { server, port } = await startServer();
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "typed-fetch-concurrency-"));
+  const tempDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "typed-fetch-concurrency-"),
+  );
   const registryPath = path.join(tempDir, "registry.json");
   const generatedPath = path.join(tempDir, "typed-fetch.d.ts");
 
@@ -48,7 +52,7 @@ test("typedFetch file observer preserves high-volume observations", async () => 
           registryPath,
           generatedPath,
         },
-      })
+      }),
     );
 
     await Promise.all(requests);

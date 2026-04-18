@@ -21,7 +21,11 @@ function startServer(handler) {
         reject(new Error("Failed to bind test server"));
         return;
       }
-      resolve({ server, port: addr.port, base: `http://127.0.0.1:${addr.port}` });
+      resolve({
+        server,
+        port: addr.port,
+        base: `http://127.0.0.1:${addr.port}`,
+      });
     });
     server.on("error", reject);
   });
@@ -79,7 +83,11 @@ function renderHookWithCache(useHook, cache) {
   }
 
   function Wrapper() {
-    return React.createElement(TypedFetchProvider, { cache }, React.createElement(Inner));
+    return React.createElement(
+      TypedFetchProvider,
+      { cache },
+      React.createElement(Inner),
+    );
   }
 
   act(() => {
@@ -147,10 +155,12 @@ test("useTypedFetch throws when no cache is provided via context or options", ()
 
   assert.throws(() => {
     act(() => {
-      create(React.createElement(function () {
-        useNoCache();
-        return null;
-      }));
+      create(
+        React.createElement(() => {
+          useNoCache();
+          return null;
+        }),
+      );
     });
   }, /TypedFetchCache/);
 });
@@ -159,7 +169,9 @@ test("useTypedFetch throws when no cache is provided via context or options", ()
 
 test("useTypedFetch returns isLoading: true initially when no cached data", async () => {
   // Use a server that hangs so the hook stays in loading state long enough to assert.
-  const { server, base } = await startServer((_req, _res) => { /* intentionally hangs */ });
+  const { server, base } = await startServer((_req, _res) => {
+    /* intentionally hangs */
+  });
   const cache = createTypedFetchCache();
 
   try {
@@ -202,7 +214,13 @@ test("useTypedFetch returns isLoading: false when enabled is false", () => {
 
 test("useTypedFetch serves initialData without a network call when enabled:false", () => {
   const cache = createTypedFetchCache({ staleTime: 60_000 });
-  const initialData = { status: 200, ok: true, data: { id: 1 }, response: null, endpoint: "GET /users" };
+  const initialData = {
+    status: 200,
+    ok: true,
+    data: { id: 1 },
+    response: null,
+    endpoint: "GET /users",
+  };
 
   // enabled:false means no fetch is issued regardless of the URL.
   const { result, unmount } = renderHookWithCache(
@@ -241,7 +259,13 @@ test("useTypedFetch exposes refetch, invalidate, and invalidateEndpoint as funct
 test("useTypedFetch returns cached result as isSuccess when data is in cache", () => {
   const cache = createTypedFetchCache({ staleTime: 60_000 });
   const key = cache.buildKey("https://example.com/users", "GET");
-  const fakeResult = { status: 200, ok: true, data: [{ id: 1 }], response: null, endpoint: "GET /users" };
+  const fakeResult = {
+    status: 200,
+    ok: true,
+    data: [{ id: 1 }],
+    response: null,
+    endpoint: "GET /users",
+  };
   cache.set(key, fakeResult, "GET /users");
 
   const { result, unmount } = renderHookWithCache(
@@ -262,7 +286,13 @@ test("useTypedFetch returns cached result as isSuccess when data is in cache", (
 test("useTypedFetch select transforms the result", () => {
   const cache = createTypedFetchCache({ staleTime: 60_000 });
   const key = cache.buildKey("https://example.com/users", "GET");
-  const fakeResult = { status: 200, ok: true, data: [{ id: 1 }, { id: 2 }], response: null, endpoint: "GET /users" };
+  const fakeResult = {
+    status: 200,
+    ok: true,
+    data: [{ id: 1 }, { id: 2 }],
+    response: null,
+    endpoint: "GET /users",
+  };
   cache.set(key, fakeResult, "GET /users");
 
   const { result, unmount } = renderHookWithCache(
@@ -358,7 +388,9 @@ test("useTypedMutation calls onSuccess callback after a successful mutation", as
   function Inner() {
     hookResult = useTypedMutation({
       endpointKey: "POST /users",
-      onSuccess: (r) => { successResult = r; },
+      onSuccess: (r) => {
+        successResult = r;
+      },
     });
     return null;
   }
@@ -376,4 +408,110 @@ test("useTypedMutation calls onSuccess callback after a successful mutation", as
 
   act(() => renderer.current.unmount());
   await new Promise((r) => server.close(r));
+});
+
+test("useTypedFetch: user-supplied AbortSignal is honoured — pre-aborted signal prevents fetch", async () => {
+  const { server, base } = await startServer((_req, res) => {
+    res.statusCode = 200;
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ name: "Alice" }));
+  });
+
+  const cache = createTypedFetchCache({ staleTime: 60_000, retry: false });
+
+  const preAbortController = new AbortController();
+  preAbortController.abort();
+  const preAbortedSignal = preAbortController.signal;
+
+  let hookResult;
+  const renderer = { current: null };
+
+  function Inner() {
+    hookResult = useTypedFetch(
+      `${base}/users/1`,
+      { signal: preAbortedSignal },
+      {
+        endpointKey: "GET /users/:id",
+        cache,
+      },
+    );
+    return null;
+  }
+
+  act(() => {
+    renderer.current = create(
+      React.createElement(
+        TypedFetchProvider,
+        { cache },
+        React.createElement(Inner),
+      ),
+    );
+  });
+
+  await new Promise((r) => setTimeout(r, 100));
+
+  // Either the request was never made (result undefined) or it got a network error.
+  // Either way, result.ok should never be true.
+  if (hookResult.result !== undefined) {
+    assert.equal(
+      hookResult.result.ok,
+      false,
+      "pre-aborted signal should not yield a successful result",
+    );
+  }
+
+  act(() => renderer.current.unmount());
+  await new Promise((r) => server.close(r));
+});
+
+test("useTypedFetch: internal cleanup controller aborts request on unmount", async () => {
+  let requestReceived = false;
+
+  const { server, base } = await startServer(async (_req, res) => {
+    requestReceived = true;
+    await new Promise((r) => setTimeout(r, 150));
+    res.statusCode = 200;
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ name: "Bob" }));
+  });
+
+  const cache = createTypedFetchCache({ staleTime: 60_000, retry: false });
+  let hookResult;
+  const renderer = { current: null };
+
+  function Inner() {
+    hookResult = useTypedFetch(`${base}/slow`, undefined, {
+      endpointKey: "GET /slow",
+      cache,
+    });
+    return null;
+  }
+
+  act(() => {
+    renderer.current = create(
+      React.createElement(
+        TypedFetchProvider,
+        { cache },
+        React.createElement(Inner),
+      ),
+    );
+  });
+
+  await new Promise((r) => setTimeout(r, 30));
+  assert.ok(requestReceived, "request should have been received by the server");
+
+  act(() => renderer.current.unmount());
+
+  await new Promise((r) => setTimeout(r, 200));
+
+  // The cache should remain empty because the abort fired before the result was stored.
+  const entry = cache.get(`GET:${base}/slow`);
+  assert.equal(
+    entry,
+    undefined,
+    "aborted request should not populate the cache",
+  );
+
+  await new Promise((r) => server.close(r));
+  void hookResult; // suppress lint warning
 });

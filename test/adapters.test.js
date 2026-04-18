@@ -1,7 +1,10 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { observeResponse } = require("../dist/adapters/generic");
+const {
+  observeResponse,
+  cancelScheduledGenerate,
+} = require("../dist/adapters/generic");
 const { typedFetchObserver } = require("../dist/adapters/hono");
 const { withTypedFetchObserver } = require("../dist/adapters/next");
 
@@ -148,7 +151,10 @@ test("typedFetchObserver does not throw when next() throws", async () => {
   };
   // If next throws, the error should propagate (standard middleware contract)
   await assert.rejects(
-    () => middleware(ctx, async () => { throw new Error("route error"); }),
+    () =>
+      middleware(ctx, async () => {
+        throw new Error("route error");
+      }),
     /route error/,
   );
 });
@@ -193,7 +199,9 @@ test("withTypedFetchObserver passes ctx to the inner handler", async () => {
 });
 
 test("withTypedFetchObserver does not throw when handler throws", async () => {
-  const handler = async (_req) => { throw new Error("handler error"); };
+  const handler = async (_req) => {
+    throw new Error("handler error");
+  };
   const wrapped = withTypedFetchObserver("GET /api/crash", handler);
   const req = new Request("https://example.com/api/crash");
   await assert.rejects(() => wrapped(req), /handler error/);
@@ -204,4 +212,11 @@ test("withTypedFetchObserver resolves without throwing for non-JSON responses", 
   const wrapped = withTypedFetchObserver("GET /api/text", handler);
   const req = new Request("https://example.com/api/text");
   await assert.doesNotReject(() => wrapped(req));
+});
+
+test("cancelScheduledGenerate is exported and does not throw when no timer is pending", () => {
+  assert.equal(typeof cancelScheduledGenerate, "function");
+  assert.doesNotThrow(() => cancelScheduledGenerate());
+  // Calling it twice is safe.
+  assert.doesNotThrow(() => cancelScheduledGenerate());
 });

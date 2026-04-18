@@ -30,8 +30,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Type check
+        run: pnpm exec tsc --noEmit && pnpm exec tsc -p tsconfig.esm.json --noEmit
+
       - name: Build
         run: pnpm run build
+
+      - name: Lint
+        run: pnpm exec biome check src test --diagnostic-level=error
 
       - name: Test
         run: pnpm test

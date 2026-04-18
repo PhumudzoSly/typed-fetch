@@ -10,7 +10,7 @@ const { flushObservations, generateTypes } = require("../dist/index");
 const { loadRegistry } = require("../dist/core/registry");
 
 function startServer() {
-  const server = http.createServer((req, res) => {
+  const server = http.createServer((_req, res) => {
     res.statusCode = 200;
     res.setHeader("content-type", "application/json");
     res.end(JSON.stringify({ id: 1, name: "Alice" }));
@@ -45,7 +45,7 @@ test("flushObservations + generateTypes works without CLI", async () => {
     const registry = loadRegistry(registryPath);
     assert.ok(registry.endpoints["GET /users/:id"]);
 
-    const result = generateTypes({}, { configPath: undefined });
+    const _result = generateTypes({}, { configPath: undefined });
     // generateTypes reads from the default config path; pass explicit config
     const result2 = generateTypes({ registryPath, generatedPath });
     assert.equal(result2.warnings.length, 0);
