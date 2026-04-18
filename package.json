@@ -7,23 +7,28 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "import": "./dist/esm/index.js",
+      "require": "./dist/index.js"
     },
     "./react": {
       "types": "./dist/react.d.ts",
-      "default": "./dist/react.js"
+      "import": "./dist/esm/react.js",
+      "require": "./dist/react.js"
     },
     "./adapters/generic": {
       "types": "./dist/adapters/generic.d.ts",
-      "default": "./dist/adapters/generic.js"
+      "import": "./dist/esm/adapters/generic.js",
+      "require": "./dist/adapters/generic.js"
     },
     "./adapters/hono": {
       "types": "./dist/adapters/hono.d.ts",
-      "default": "./dist/adapters/hono.js"
+      "import": "./dist/esm/adapters/hono.js",
+      "require": "./dist/adapters/hono.js"
     },
     "./adapters/next": {
       "types": "./dist/adapters/next.d.ts",
-      "default": "./dist/adapters/next.js"
+      "import": "./dist/esm/adapters/next.js",
+      "require": "./dist/adapters/next.js"
     }
   },
   "peerDependencies": {
@@ -40,7 +45,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "tsconfig.esm.json"
   ],
   "engines": {
     "node": ">=20"
@@ -49,7 +55,8 @@
     "typed-fetch": "dist/cli.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && tsc -p tsconfig.esm.json",
+    "lint": "biome check src test --diagnostic-level=error",
     "init": "node dist/cli.js init",
     "generate": "node dist/cli.js generate",
     "check": "node dist/cli.js check",
@@ -80,6 +87,7 @@
     "picomatch": "^4.0.4"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.12",
     "@types/node": "^22.13.14",
     "@types/picomatch": "^4.0.3",
     "@types/react": "^18.0.0",
