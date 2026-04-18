@@ -4,8 +4,11 @@ Typed Fetch Tools adds production-ready VS Code commands for `@phumudzo/typed-fe
 
 ## What this extension does
 
-- Manual type generation from Command Palette: runs `npx typed-fetch generate`
-- Listener controls: start/stop `npx typed-fetch listen`
+- Manual type generation from Command Palette: runs `typed-fetch generate`
+- Watch mode: start auto-regeneration via `typed-fetch watch`
+- Initialization: run `typed-fetch init` (one-time project setup)
+- Type validation: run `typed-fetch check` to verify artifacts
+- Cleanup: remove generated artifacts with `typed-fetch clean`
 - One-shot workflow: run current JS/TS file and then regenerate types
 - Inline shortcuts:
   - CodeLens above `typedFetch(...)` and `tFetch(...)`
@@ -19,10 +22,9 @@ All command output is written to the `Typed Fetch Tools` output channel.
 - Node.js and `npx`
 - A workspace with `typed-fetch` available to `npx` (local dependency recommended)
 
-## Extension Settings
+## Settings
 
-- `typedFetchTools.listenPort`: listener port (default `43111`)
-- `typedFetchTools.allowNetwork`: pass `--allow-network` when starting listener
+- `typedFetchTools.configPath`: Path to typed-fetch config file (default `./typed-fetch.config.ts`). Passed as `--config` to all CLI commands.
 
 ## Manual Generate Flow
 
@@ -45,7 +47,7 @@ pnpm run build
 Launch an Extension Development Host:
 
 ```bash
-code --extensionDevelopmentPath="c:\Users\Phumu\Work\CLIs\next-typed-fetch\extensions\vscode-typed-fetch"
+code --extensionDevelopmentPath="./extensions/vscode-typed-fetch"
 ```
 
 ## Package for Distribution

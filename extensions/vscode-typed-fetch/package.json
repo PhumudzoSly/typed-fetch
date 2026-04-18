@@ -7,12 +7,12 @@
   "license": "UNLICENSED",
   "repository": {
     "type": "git",
-    "url": "https://github.com/PhumudzoSly/next-typed-fetch.git",
+    "url": "https://github.com/PhumudzoSly/typed-fetch.git",
     "directory": "extensions/vscode-typed-fetch"
   },
-  "homepage": "https://github.com/PhumudzoSly/next-typed-fetch/tree/main/extensions/vscode-typed-fetch",
+  "homepage": "https://github.com/PhumudzoSly/typed-fetch/tree/main/extensions/vscode-typed-fetch",
   "bugs": {
-    "url": "https://github.com/PhumudzoSly/next-typed-fetch/issues"
+    "url": "https://github.com/PhumudzoSly/typed-fetch/issues"
   },
   "engines": {
     "vscode": "^1.90.0"
@@ -40,7 +40,10 @@
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
+    "onCommand:typedFetch.init",
     "onCommand:typedFetch.generate",
+    "onCommand:typedFetch.check",
+    "onCommand:typedFetch.clean",
     "onCommand:typedFetch.watch",
     "onCommand:typedFetch.runAndGenerate",
     "onLanguage:typescript",
@@ -49,6 +52,11 @@
   "contributes": {
     "commands": [
       {
+        "command": "typedFetch.init",
+        "title": "Typed Fetch: Initialize",
+        "category": "Typed Fetch"
+      },
+      {
         "command": "typedFetch.generate",
         "title": "Typed Fetch: Generate Types",
         "category": "Typed Fetch",
@@ -56,6 +64,16 @@
           "light": "media/icons/generate-light.svg",
           "dark": "media/icons/generate-dark.svg"
         }
+      },
+      {
+        "command": "typedFetch.check",
+        "title": "Typed Fetch: Check Types",
+        "category": "Typed Fetch"
+      },
+      {
+        "command": "typedFetch.clean",
+        "title": "Typed Fetch: Clean Artifacts",
+        "category": "Typed Fetch"
       },
       {
         "command": "typedFetch.watch",
@@ -118,7 +136,13 @@
     },
     "configuration": {
       "title": "Typed Fetch Tools",
-      "properties": {}
+      "properties": {
+        "typedFetchTools.configPath": {
+          "type": "string",
+          "default": "./typed-fetch.config.ts",
+          "description": "Path to typed-fetch config file (relative to workspace root). Passed as --config to all CLI commands."
+        }
+      }
     }
   },
   "scripts": {
