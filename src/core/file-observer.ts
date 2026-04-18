@@ -39,6 +39,12 @@ function flush(registryPath: string): void {
   } catch {
     // Best effort: observation recording must never break request flow.
   }
+
+  // Remove the map entry once fully drained to avoid unbounded growth in
+  // long-running processes that observe many different registry paths.
+  if (state.observations.length === 0 && state.timer === null) {
+    queueByRegistryPath.delete(registryPath);
+  }
 }
 
 export function queueRegistryObservation(args: {

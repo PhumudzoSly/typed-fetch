@@ -1,12 +1,11 @@
-import { queueRegistryObservation } from "./core/file-observer";
-import { postObservationToServer } from "./core/http-observer";
+import type { TypedFetchCache } from "./cache";
 import { loadConfig } from "./core/config";
+import { queueRegistryObservation } from "./core/file-observer";
 import { shouldTrackEndpoint } from "./core/filter";
+import { postObservationToServer } from "./core/http-observer";
 import { normalizeEndpointKey } from "./core/normalize";
 import { inferShape } from "./core/shape";
-import type { TypedFetchCache } from "./cache";
 import type {
-  EndpointKey,
   ShapeNode,
   TypedFetchConfig,
   TypedFetchRequestInit,
@@ -42,9 +41,7 @@ function parsePathname(input: RequestInfo | URL): string {
 }
 
 function isJsonContentType(contentType: string | null): boolean {
-  return Boolean(
-    contentType && contentType.toLowerCase().includes("application/json"),
-  );
+  return Boolean(contentType?.toLowerCase().includes("application/json"));
 }
 
 function emitDevWarning(message: string, code = "TYPED_FETCH_WARNING"): void {
@@ -55,6 +52,18 @@ function emitDevWarning(message: string, code = "TYPED_FETCH_WARNING"): void {
   }
 }
 
+const KNOWN_HTTP_METHODS = new Set([
+  "GET",
+  "POST",
+  "PUT",
+  "PATCH",
+  "DELETE",
+  "HEAD",
+  "OPTIONS",
+  "CONNECT",
+  "TRACE",
+]);
+
 function isValidEndpointKeyFormat(endpointKey: string): boolean {
   const spaceIdx = endpointKey.indexOf(" ");
   if (spaceIdx <= 0 || spaceIdx !== endpointKey.lastIndexOf(" ")) {
@@ -63,7 +72,9 @@ function isValidEndpointKeyFormat(endpointKey: string): boolean {
 
   const method = endpointKey.slice(0, spaceIdx);
   const path = endpointKey.slice(spaceIdx + 1);
-  return /^[A-Z]+$/.test(method) && path.startsWith("/") && path.length > 0;
+  return (
+    KNOWN_HTTP_METHODS.has(method) && path.startsWith("/") && path.length > 1
+  );
 }
 
 function warnIfKeyMismatch(
@@ -129,7 +140,7 @@ function isOkStatus(status: number): status is TypedFetchSuccessStatuses {
  * Augmented by the generated `.d.ts` file (`typed-fetch generate`).
  * Do not edit manually — use `TypedFetchUserEndpoints` for manual additions.
  */
-export interface TypedFetchGeneratedResponses {}
+export type TypedFetchGeneratedResponses = {};
 
 /**
  * Augment this interface to manually declare endpoint response types for
@@ -148,7 +159,7 @@ export interface TypedFetchGeneratedResponses {}
  *   }
  * }
  */
-export interface TypedFetchUserEndpoints {}
+export type TypedFetchUserEndpoints = {};
 
 // All endpoints known at compile time — user-defined win over generated.
 type AllEndpoints = TypedFetchUserEndpoints & TypedFetchGeneratedResponses;
@@ -199,7 +210,9 @@ type KnownEndpointResult<K extends KnownEndpointKey> = {
  * Discriminate from a normal result by checking `result.error` or
  * `result.status === 0`.
  */
-export type TypedFetchNetworkError<K extends TypedEndpointKey = TypedEndpointKey> = {
+export type TypedFetchNetworkError<
+  K extends TypedEndpointKey = TypedEndpointKey,
+> = {
   endpoint: K;
   /** Always 0 for network errors — no HTTP response was received. */
   status: 0;
@@ -306,7 +319,10 @@ export async function typedFetch<K extends TypedEndpointKey = TypedEndpointKey>(
     if (entry && !cache.isStale(entry)) return entry.result;
 
     // 3. Fetch with retry. Call self without cache to run the real fetch path.
-    const optionsWithoutCache: TypedFetchOptions<K> = { ...options, cache: undefined };
+    const optionsWithoutCache: TypedFetchOptions<K> = {
+      ...options,
+      cache: undefined,
+    };
     const maxRetries = typeof cache.retry === "number" ? cache.retry : 0;
 
     const fetchWithRetry = async (): Promise<TypedFetchResult<K>> => {
@@ -316,7 +332,9 @@ export async function typedFetch<K extends TypedEndpointKey = TypedEndpointKey>(
         lastResult = result;
         if (result.status !== 0) return result; // success or HTTP error — stop
         if (attempt < maxRetries) {
-          await new Promise<void>((r) => setTimeout(r, cache.retryDelay(attempt)));
+          await new Promise<void>((r) =>
+            setTimeout(r, cache.retryDelay(attempt)),
+          );
         }
       }
       // lastResult is always assigned: maxRetries >= 0 guarantees at least one iteration
@@ -326,7 +344,8 @@ export async function typedFetch<K extends TypedEndpointKey = TypedEndpointKey>(
     const fetchPromise = fetchWithRetry()
       .then((result) => {
         // Never cache network errors — they should be retried next time.
-        if (result.status !== 0) cache.set(cacheKey, result, options.endpointKey);
+        if (result.status !== 0)
+          cache.set(cacheKey, result, options.endpointKey);
         return result;
       })
       .finally(() => cache.clearInFlight(cacheKey));
@@ -353,7 +372,7 @@ export async function typedFetch<K extends TypedEndpointKey = TypedEndpointKey>(
       dynamicSegmentPatterns: config.dynamicSegmentPatterns,
     });
     throw new Error(
-      `typedFetch requires an endpointKey matching \"METHOD /path\" (e.g. \"GET /users/:id\"). Suggested key: \"${inferred}\"`,
+      `typedFetch requires an endpointKey matching "METHOD /path" (e.g. "GET /users/:id"). Suggested key: "${inferred}"`,
     );
   }
 
@@ -375,7 +394,7 @@ export async function typedFetch<K extends TypedEndpointKey = TypedEndpointKey>(
     return networkError;
   }
 
-  let data: unknown = undefined;
+  let data: unknown;
   let shape: ShapeNode = { kind: "unknown" };
   const contentType = response.headers.get("content-type");
   const jsonCandidate = isJsonContentType(contentType);

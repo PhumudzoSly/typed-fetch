@@ -68,7 +68,13 @@ export class TypedFetchCache {
 
   /**
    * Builds a stable cache key from a URL and HTTP method.
-   * Key format: `"METHOD:url"` using the fully-resolved URL string.
+   * Key format: `"METHOD:url"` using the URL string as-is.
+   *
+   * **Note:** Relative and absolute URLs that resolve to the same resource are
+   * treated as distinct cache keys. For example, `/api/users` and
+   * `http://localhost:3000/api/users` will produce different entries.
+   * Always use consistent URL forms (all relative or all absolute) within
+   * a single application to avoid duplicate cache entries.
    */
   buildKey(input: RequestInfo | URL, method: string): string {
     let url: string;
@@ -80,7 +86,9 @@ export class TypedFetchCache {
 
   // ─── Entry access ───────────────────────────────────────────────────────────
 
-  get<T>(key: string): { result: T; fetchedAt: number; endpointKey: string } | undefined {
+  get<T>(
+    key: string,
+  ): { result: T; fetchedAt: number; endpointKey: string } | undefined {
     return this._entries.get(key) as
       | { result: T; fetchedAt: number; endpointKey: string }
       | undefined;
@@ -107,7 +115,9 @@ export class TypedFetchCache {
     }, this.gcTime);
 
     // Don't prevent Node.js process from exiting while waiting for GC.
-    if (typeof (timer as unknown as { unref?: () => void }).unref === "function") {
+    if (
+      typeof (timer as unknown as { unref?: () => void }).unref === "function"
+    ) {
       (timer as unknown as { unref: () => void }).unref();
     }
 
@@ -140,7 +150,7 @@ export class TypedFetchCache {
    */
   subscribe(key: string, cb: () => void): () => void {
     if (!this._listeners.has(key)) this._listeners.set(key, new Set());
-    this._listeners.get(key)!.add(cb);
+    this._listeners.get(key)?.add(cb);
     return () => {
       const set = this._listeners.get(key);
       if (!set) return;
