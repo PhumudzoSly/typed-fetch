@@ -37,8 +37,8 @@ function sortShape(shape: ShapeNode): ShapeNode {
           };
           return acc;
         },
-        {}
-      )
+        {},
+      ),
     );
     return { kind: "object", fields };
   }
@@ -56,7 +56,9 @@ function uniqueVariants(variants: ShapeNode[]): ShapeNode[] {
   for (const variant of variants.map((v) => sortShape(v))) {
     map.set(shapeKey(variant), variant);
   }
-  return Array.from(map.values()).sort((a, b) => shapeKey(a).localeCompare(shapeKey(b)));
+  return Array.from(map.values()).sort((a, b) =>
+    shapeKey(a).localeCompare(shapeKey(b)),
+  );
 }
 
 function normalizeUnion(shape: ShapeNode): ShapeNode {
@@ -98,8 +100,11 @@ function mergeUnionWith(shape: ShapeNode, other: ShapeNode): ShapeNode {
 
 export function inferShape(
   value: unknown,
-  config: Pick<TypedFetchConfig, "maxDepth" | "maxArraySample" | "ignoreFieldNames">,
-  depth = 0
+  config: Pick<
+    TypedFetchConfig,
+    "maxDepth" | "maxArraySample" | "ignoreFieldNames"
+  >,
+  depth = 0,
 ): ShapeNode {
   if (depth > config.maxDepth) {
     return { kind: "unknown" };
@@ -131,7 +136,7 @@ export function inferShape(
     for (let index = 1; index < sample.length; index += 1) {
       itemsShape = mergeShapes(
         itemsShape,
-        inferShape(sample[index], config, depth + 1)
+        inferShape(sample[index], config, depth + 1),
       );
     }
     return { kind: "array", items: itemsShape };
@@ -139,7 +144,9 @@ export function inferShape(
 
   if (isPlainObject(value)) {
     const fields: Record<string, ObjectField> = {};
-    const entries = Object.entries(value).sort((a, b) => a[0].localeCompare(b[0]));
+    const entries = Object.entries(value).sort((a, b) =>
+      a[0].localeCompare(b[0]),
+    );
     for (const [fieldName, fieldValue] of entries) {
       if (config.ignoreFieldNames.includes(fieldName.toLowerCase())) {
         continue;
@@ -175,7 +182,9 @@ export function mergeShapes(left: ShapeNode, right: ShapeNode): ShapeNode {
     ]);
     const mergedFields: Record<string, ObjectField> = {};
 
-    for (const fieldName of Array.from(allFieldNames).sort((a, b) => a.localeCompare(b))) {
+    for (const fieldName of Array.from(allFieldNames).sort((a, b) =>
+      a.localeCompare(b),
+    )) {
       const leftField = left.fields[fieldName];
       const rightField = right.fields[fieldName];
 
@@ -229,14 +238,14 @@ export function shapeToTypeScript(shape: ShapeNode): string {
           const optional = field.optional ? "?" : "";
           const nullable = field.nullable ? " | null" : "";
           return `${JSON.stringify(fieldName)}${optional}: ${shapeToTypeScript(
-            field.shape
+            field.shape,
           )}${nullable};`;
         });
       return `{ ${fields.join(" ")} }`;
     }
     case "union": {
       const variants = uniqueVariants(shape.variants).map((variant) =>
-        shapeToTypeScript(variant)
+        shapeToTypeScript(variant),
       );
       return variants.join(" | ");
     }
@@ -244,4 +253,3 @@ export function shapeToTypeScript(shape: ShapeNode): string {
       return "unknown";
   }
 }
-

@@ -35,9 +35,9 @@ test("loadConfig supports explicit config file paths", () => {
         strictPrivacyMode: false,
       },
       null,
-      2
+      2,
     ),
-    "utf8"
+    "utf8",
   );
 
   const config = loadConfig({}, { configPath });

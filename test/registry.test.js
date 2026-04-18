@@ -5,7 +5,11 @@ const os = require("node:os");
 const path = require("node:path");
 
 const { inferShape } = require("../dist/core/shape");
-const { loadRegistry, observeShape, saveRegistry } = require("../dist/core/registry");
+const {
+  loadRegistry,
+  observeShape,
+  saveRegistry,
+} = require("../dist/core/registry");
 
 const baseConfig = {
   maxDepth: 8,
@@ -14,7 +18,9 @@ const baseConfig = {
 };
 
 test("persists merged status buckets without raw values", () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "typed-fetch-registry-"));
+  const tempDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "typed-fetch-registry-"),
+  );
   const registryPath = path.join(tempDir, "registry.json");
 
   const registry = loadRegistry(registryPath);

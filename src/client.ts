@@ -1,7 +1,7 @@
-import { typedFetch } from "./tFetch";
-import type { TypedFetchConfig } from "./core/types";
-import type { TypedFetchResult, TypedEndpointKey } from "./tFetch";
 import type { TypedFetchCache } from "./cache";
+import type { TypedFetchConfig } from "./core/types";
+import type { TypedEndpointKey, TypedFetchResult } from "./tFetch";
+import { typedFetch } from "./tFetch";
 
 type TypedFetchRequestInit = RequestInit;
 
@@ -64,7 +64,9 @@ type TypedFetchClient = {
  *   endpointKey: "GET /users/:id",
  * });
  */
-export function createTypedFetchClient(options: ClientOptions): TypedFetchClient {
+export function createTypedFetchClient(
+  options: ClientOptions,
+): TypedFetchClient {
   const {
     baseUrl,
     config: clientConfig,

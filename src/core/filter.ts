@@ -1,6 +1,10 @@
 import { matchesAnyGlob } from "./glob";
 
-export function shouldTrackEndpoint(pathname: string, include: string[], exclude: string[]): boolean {
+export function shouldTrackEndpoint(
+  pathname: string,
+  include: string[],
+  exclude: string[],
+): boolean {
   if (matchesAnyGlob(pathname, exclude)) {
     return false;
   }
@@ -11,4 +15,3 @@ export function shouldTrackEndpoint(pathname: string, include: string[], exclude
 
   return matchesAnyGlob(pathname, include);
 }
-

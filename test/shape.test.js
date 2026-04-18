@@ -1,7 +1,11 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { inferShape, mergeShapes, shapeToTypeScript } = require("../dist/core/shape");
+const {
+  inferShape,
+  mergeShapes,
+  shapeToTypeScript,
+} = require("../dist/core/shape");
 
 const baseConfig = {
   maxDepth: 8,
@@ -16,7 +20,7 @@ test("infers object shape and ignores sensitive fields", () => {
       profile: { name: "Ada" },
       token: "dont-store",
     },
-    baseConfig
+    baseConfig,
   );
 
   assert.equal(shape.kind, "object");
@@ -38,10 +42,9 @@ test("merges object shapes with optional and nullable fields", () => {
 test("renders unions to TypeScript", () => {
   const merged = mergeShapes(
     inferShape({ value: 1 }, baseConfig),
-    inferShape({ value: "one" }, baseConfig)
+    inferShape({ value: "one" }, baseConfig),
   );
 
   const ts = shapeToTypeScript(merged);
   assert.match(ts, /number \| string/);
 });
-

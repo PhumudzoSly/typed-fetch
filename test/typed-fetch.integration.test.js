@@ -7,7 +7,11 @@ const http = require("node:http");
 
 const { typedFetch } = require("../dist/tFetch");
 const { loadRegistry } = require("../dist/core/registry");
-const { flushObservations, generateTypes, checkTypes } = require("../dist/index");
+const {
+  flushObservations,
+  generateTypes,
+  checkTypes,
+} = require("../dist/index");
 
 function startServer() {
   const server = http.createServer((req, res) => {
@@ -84,7 +88,9 @@ test("typedFetch captures status-aware shapes and strips ignored field names", a
 
 test("full pipeline: observe → registry → generate → check produces valid .d.ts", async () => {
   const { server, port } = await startServer();
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "typed-fetch-pipeline-"));
+  const tempDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "typed-fetch-pipeline-"),
+  );
   const registryPath = path.join(tempDir, "registry.json");
   const generatedPath = path.join(tempDir, "typed-fetch.d.ts");
   const baseUrl = `http://127.0.0.1:${port}`;
@@ -134,7 +140,6 @@ test("typedFetch rejects malformed endpointKey before issuing request", async ()
         endpointKey: "users/1",
         config: { observerMode: "none" },
       }),
-    /requires an endpointKey matching "METHOD \/path"/
+    /requires an endpointKey matching "METHOD \/path"/,
   );
 });
-

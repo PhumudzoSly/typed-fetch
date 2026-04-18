@@ -1,4 +1,4 @@
-import { dirname } from "path";
+import { dirname } from "node:path";
 import { loadConfig } from "./core/config";
 import { clearRegistry, loadRegistry } from "./core/registry";
 import { shapeToTypeScript } from "./core/shape";
@@ -10,7 +10,7 @@ function stableSortedEntries<T>(record: Record<string, T>): Array<[string, T]> {
 
 function ensureDir(path: string): void {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const fs = require("fs") as typeof import("fs");
+  const fs = require("node:fs") as typeof import("fs");
   if (!fs.existsSync(path)) {
     fs.mkdirSync(path, { recursive: true });
   }
@@ -18,14 +18,14 @@ function ensureDir(path: string): void {
 
 function writeFile(path: string, content: string): void {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const fs = require("fs") as typeof import("fs");
+  const fs = require("node:fs") as typeof import("fs");
   ensureDir(dirname(path));
   fs.writeFileSync(path, content, "utf8");
 }
 
 function readFile(path: string): string | null {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const fs = require("fs") as typeof import("fs");
+  const fs = require("node:fs") as typeof import("fs");
   if (!fs.existsSync(path)) {
     return null;
   }
@@ -38,7 +38,7 @@ function getShapeOrUnknown(shape: ShapeNode | undefined): ShapeNode {
 
 function renderEndpointResponses(
   registry: Registry,
-  overrides: Record<string, Record<string, string>> = {}
+  overrides: Record<string, Record<string, string>> = {},
 ): string {
   const endpointLines: string[] = [];
 
@@ -50,8 +50,14 @@ function renderEndpointResponses(
 
   for (const [endpointKey, endpoint] of stableSortedEntries(
     Object.fromEntries(
-      Array.from(allKeys).map((k) => [k, registry.endpoints[k] ?? { responses: {}, meta: { seenCount: 0, lastSeenAt: "" } }])
-    )
+      Array.from(allKeys).map((k) => [
+        k,
+        registry.endpoints[k] ?? {
+          responses: {},
+          meta: { seenCount: 0, lastSeenAt: "" },
+        },
+      ]),
+    ),
   )) {
     const endpointOverrides = overrides[endpointKey] ?? {};
     // Collect all statuses from both registry and overrides for this endpoint.
@@ -60,11 +66,14 @@ function renderEndpointResponses(
       ...Object.keys(endpointOverrides),
     ]);
     const statusLines: string[] = [];
-    for (const [status] of stableSortedEntries(Object.fromEntries(Array.from(allStatuses).map((s) => [s, null])))) {
+    for (const [status] of stableSortedEntries(
+      Object.fromEntries(Array.from(allStatuses).map((s) => [s, null])),
+    )) {
       const override = endpointOverrides[status];
-      const type = override !== undefined
-        ? override
-        : shapeToTypeScript(getShapeOrUnknown(endpoint.responses[status]));
+      const type =
+        override !== undefined
+          ? override
+          : shapeToTypeScript(getShapeOrUnknown(endpoint.responses[status]));
       statusLines.push(`      ${status}: ${type};`);
     }
     if (statusLines.length > 0) {
@@ -89,7 +98,7 @@ function renderEndpointResponses(
  */
 export function generateTypes(
   configOverrides: Partial<TypedFetchConfig> = {},
-  options: { configPath?: string } = {}
+  options: { configPath?: string } = {},
 ): {
   outputPath: string;
   content: string;
@@ -113,7 +122,9 @@ export {};
 
   writeFile(config.generatedPath, content);
   const warnings: string[] = [];
-  for (const [endpointKey, endpoint] of stableSortedEntries(registry.endpoints)) {
+  for (const [endpointKey, endpoint] of stableSortedEntries(
+    registry.endpoints,
+  )) {
     const observedPaths = endpoint.meta.observedPaths ?? [];
     if (observedPaths.length > 1) {
       warnings.push(
@@ -127,7 +138,7 @@ export {};
 
 export function checkTypes(
   configOverrides: Partial<TypedFetchConfig> = {},
-  options: { configPath?: string } = {}
+  options: { configPath?: string } = {},
 ): {
   ok: boolean;
   outputPath: string;
@@ -163,7 +174,7 @@ export function cleanArtifacts(
   const removeRegistry = args.registry || (!args.generated && !args.registry);
 
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const fs = require("fs") as typeof import("fs");
+  const fs = require("node:fs") as typeof import("fs");
 
   if (removeGenerated && fs.existsSync(config.generatedPath)) {
     fs.rmSync(config.generatedPath, { force: true });

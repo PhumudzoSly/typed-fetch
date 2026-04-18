@@ -24,7 +24,7 @@ const CONFIG_FILE_NAME = "typed-fetch.config.json";
 function readJsonFileIfExists<T>(path: string): T | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const fs = require("fs") as typeof import("fs");
+    const fs = require("node:fs") as typeof import("fs");
     if (!fs.existsSync(path)) {
       return null;
     }
@@ -44,7 +44,7 @@ function loadFileConfig(options: LoadConfigOptions): ConfigOverrides {
 
 export function loadConfig(
   overrides: ConfigOverrides = {},
-  options: LoadConfigOptions = {}
+  options: LoadConfigOptions = {},
 ): TypedFetchConfig {
   return { ...DEFAULT_CONFIG, ...loadFileConfig(options), ...overrides };
 }

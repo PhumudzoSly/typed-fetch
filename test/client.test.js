@@ -71,7 +71,8 @@ test("createTypedFetchClient adds leading slash to path if missing", async () =>
   });
 
   try {
-    const result = await client.fetch("users/1", undefined, { // no leading slash
+    const result = await client.fetch("users/1", undefined, {
+      // no leading slash
       endpointKey: "GET /users/:id",
     });
     assert.equal(result.status, 200);

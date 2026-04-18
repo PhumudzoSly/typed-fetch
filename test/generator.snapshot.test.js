@@ -8,7 +8,9 @@ const { generateTypes } = require("../dist/generator");
 const { saveRegistry } = require("../dist/core/registry");
 
 test("generateTypes output is stable and sorted", () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "typed-fetch-generate-"));
+  const tempDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "typed-fetch-generate-"),
+  );
   const registryPath = path.join(tempDir, "registry.json");
   const generatedPath = path.join(tempDir, "typed-fetch.d.ts");
 
@@ -17,16 +19,30 @@ test("generateTypes output is stable and sorted", () => {
     endpoints: {
       "GET /zeta": {
         responses: {
-          "404": { kind: "object", fields: { message: { shape: { kind: "string" } } } },
+          404: {
+            kind: "object",
+            fields: { message: { shape: { kind: "string" } } },
+          },
         },
-        meta: { seenCount: 1, lastSeenAt: "2026-02-01T00:00:00.000Z", observedPaths: [] },
+        meta: {
+          seenCount: 1,
+          lastSeenAt: "2026-02-01T00:00:00.000Z",
+          observedPaths: [],
+        },
       },
       "GET /alpha": {
         responses: {
-          "200": { kind: "object", fields: { id: { shape: { kind: "number" } } } },
-          "201": { kind: "void" },
+          200: {
+            kind: "object",
+            fields: { id: { shape: { kind: "number" } } },
+          },
+          201: { kind: "void" },
         },
-        meta: { seenCount: 2, lastSeenAt: "2026-02-01T00:00:00.000Z", observedPaths: [] },
+        meta: {
+          seenCount: 2,
+          lastSeenAt: "2026-02-01T00:00:00.000Z",
+          observedPaths: [],
+        },
       },
     },
   });
@@ -54,7 +70,9 @@ export {};
 });
 
 test("generateTypes applies overrides over inferred shapes", () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "typed-fetch-overrides-"));
+  const tempDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "typed-fetch-overrides-"),
+  );
   const registryPath = path.join(tempDir, "registry.json");
   const generatedPath = path.join(tempDir, "typed-fetch.d.ts");
 
@@ -63,10 +81,20 @@ test("generateTypes applies overrides over inferred shapes", () => {
     endpoints: {
       "GET /users/:id": {
         responses: {
-          "200": { kind: "object", fields: { id: { shape: { kind: "number" } } } },
-          "404": { kind: "object", fields: { message: { shape: { kind: "string" } } } },
+          200: {
+            kind: "object",
+            fields: { id: { shape: { kind: "number" } } },
+          },
+          404: {
+            kind: "object",
+            fields: { message: { shape: { kind: "string" } } },
+          },
         },
-        meta: { seenCount: 1, lastSeenAt: "2026-02-01T00:00:00.000Z", observedPaths: [] },
+        meta: {
+          seenCount: 1,
+          lastSeenAt: "2026-02-01T00:00:00.000Z",
+          observedPaths: [],
+        },
       },
     },
   });
@@ -76,14 +104,16 @@ test("generateTypes applies overrides over inferred shapes", () => {
     generatedPath,
     overrides: {
       // Override inferred 200 shape with a manually defined type.
-      "GET /users/:id": { "200": "{ id: number; name: string; email: string }" },
+      "GET /users/:id": { 200: "{ id: number; name: string; email: string }" },
       // Override-only endpoint (not in registry).
-      "POST /users": { "201": "{ id: number }" },
+      "POST /users": { 201: "{ id: number }" },
     },
   });
 
   assert.ok(result.content.includes('"GET /users/:id"'));
-  assert.ok(result.content.includes("{ id: number; name: string; email: string }"));
+  assert.ok(
+    result.content.includes("{ id: number; name: string; email: string }"),
+  );
   // 404 still comes from the registry (not overridden)
   assert.ok(result.content.includes('404: { "message": string; }'));
   // Override-only endpoint is also included

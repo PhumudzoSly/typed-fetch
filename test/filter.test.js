@@ -10,7 +10,10 @@ test("tracks all paths when include and exclude are empty", () => {
 
 test("excludes paths matching exclude patterns", () => {
   assert.equal(shouldTrackEndpoint("/health", [], ["/health"]), false);
-  assert.equal(shouldTrackEndpoint("/internal/metrics", [], ["/internal/**"]), false);
+  assert.equal(
+    shouldTrackEndpoint("/internal/metrics", [], ["/internal/**"]),
+    false,
+  );
   assert.equal(shouldTrackEndpoint("/users/1", [], ["/internal/**"]), true);
 });
 
@@ -22,6 +25,6 @@ test("only tracks paths matching include patterns when include is set", () => {
 test("exclude takes precedence over include", () => {
   assert.equal(
     shouldTrackEndpoint("/api/internal", ["/api/**"], ["/api/internal"]),
-    false
+    false,
   );
 });

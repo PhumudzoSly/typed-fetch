@@ -1,4 +1,4 @@
-import { dirname } from "path";
+import { dirname } from "node:path";
 import { mergeShapes, serializeShape } from "./shape";
 import type { Registry, ShapeNode } from "./types";
 
@@ -74,7 +74,7 @@ function stableStringify(input: unknown): string {
 
 function ensureDir(path: string): void {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const fs = require("fs") as typeof import("fs");
+  const fs = require("node:fs") as typeof import("fs");
   if (!fs.existsSync(path)) {
     fs.mkdirSync(path, { recursive: true });
   }
@@ -82,7 +82,7 @@ function ensureDir(path: string): void {
 
 export function loadRegistry(path: string): Registry {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const fs = require("fs") as typeof import("fs");
+  const fs = require("node:fs") as typeof import("fs");
   if (!fs.existsSync(path)) {
     return createEmptyRegistry();
   }
@@ -105,7 +105,7 @@ export function loadRegistry(path: string): Registry {
 
 export function saveRegistry(path: string, registry: Registry): void {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const fs = require("fs") as typeof import("fs");
+  const fs = require("node:fs") as typeof import("fs");
   ensureDir(dirname(path));
 
   const serialized = `${stableStringify(registry)}\n`;
@@ -169,7 +169,7 @@ function sleepMs(ms: number): void {
 
 function withRegistryLock<T>(registryPath: string, fn: () => T): T {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const fs = require("fs") as typeof import("fs");
+  const fs = require("node:fs") as typeof import("fs");
   const lockPath = `${registryPath}.lock`;
   const start = Date.now();
   const timeoutMs = 1500;
@@ -253,10 +253,23 @@ export function mergeRegistryInto(
     for (const [statusKey, shape] of Object.entries(endpoint.responses)) {
       if (paths.length > 0) {
         for (const rawPath of paths) {
-          observeShape({ registry: target, endpointKey, status: Number(statusKey), shape, observedAt, rawPath });
+          observeShape({
+            registry: target,
+            endpointKey,
+            status: Number(statusKey),
+            shape,
+            observedAt,
+            rawPath,
+          });
         }
       } else {
-        observeShape({ registry: target, endpointKey, status: Number(statusKey), shape, observedAt });
+        observeShape({
+          registry: target,
+          endpointKey,
+          status: Number(statusKey),
+          shape,
+          observedAt,
+        });
       }
     }
   }
@@ -273,7 +286,7 @@ export function mergeRegistryIntoPath(path: string, incoming: Registry): void {
 
 export function clearRegistry(path: string): void {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const fs = require("fs") as typeof import("fs");
+  const fs = require("node:fs") as typeof import("fs");
   if (fs.existsSync(path)) {
     fs.rmSync(path, { force: true });
   }
