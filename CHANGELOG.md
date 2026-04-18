@@ -2,6 +2,26 @@
 
 All notable changes to `@phumudzo/typed-fetch` are documented here.
 
+## [0.3.0] — 2026-04-18
+
+### Added
+
+- **Dual ESM / CJS output** — all entry points now expose both `import` and `require` export conditions. Bundlers and native ESM consumers automatically receive `dist/esm/`; CommonJS consumers continue to use `dist/`.
+- **`cancelScheduledGenerate()`** exported from `@phumudzo/typed-fetch/adapters/generic` — cancels any pending auto-regeneration timer; intended for test teardown.
+- **`createObserverServer(registryPath, onObservation)`** exported from the new `src/core/http-observer-server` module — the HTTP observation server is now independently testable without spawning the full CLI.
+- **Biome linting** added as a dev dependency and run in CI (`pnpm run lint`).
+- **`tsc --noEmit` type-check step** added to `package-ci.yml` for both CJS and ESM configs.
+- New test files: `test/cli.test.js` (9 CLI integration tests), `test/file-observer.test.js` (5 queue unit tests), `test/http-observer-server.test.js` (9 HTTP server tests).
+
+### Fixed
+
+- **`HASH_PATTERN` false positives** — path segments like `content-type-validation` (16+ char readable slugs) are no longer incorrectly normalised to `:param`. The pattern is now hex-only (`/^[0-9a-fA-F]{16,}$/`), targeting actual hashes (git SHAs, MD5s, hex API keys).
+- **`AbortSignal` overwrite in `useTypedFetch`** — when the caller passes `init.signal`, it is now merged with the internal cleanup controller's signal via `AbortSignal.any()` instead of being silently discarded.
+- **HTTP observer payload not validated** — the `watch` command's HTTP server now validates `endpointKey`, `status`, and `shape` after `JSON.parse`; missing or malformed fields return 400 instead of potentially corrupting the registry.
+- **File watcher silenced on registry deletion** — `fs.watch` handle is now captured; a `rename` event or error closes the old watcher and restarts via `setTimeout`, so running `typed-fetch clean` while `watch` is active no longer silences the process.
+- **`isValidEndpointKeyFormat` accepted any all-caps method** — replaced the loose `/^[A-Z]+$/` regex with an explicit allowlist of the nine standard HTTP methods (GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS, CONNECT, TRACE).
+- **`QueueState` map entries leaked after flush** — `file-observer.ts` now removes drained entries from the internal map, preventing unbounded growth in long-running processes.
+
 ## [0.1.11] — 2026-04-04
 
 ### Added
