@@ -15,7 +15,8 @@ test("normalizes method, dynamic path segments, and query keys", () => {
 
 test("normalizes uuid path segments", () => {
   const endpoint = normalizeEndpointKey({
-    input: "https://api.example.com/orders/4d4db7ef-05dd-4b6f-b4c3-fec9e0f8e2fe",
+    input:
+      "https://api.example.com/orders/4d4db7ef-05dd-4b6f-b4c3-fec9e0f8e2fe",
     method: "POST",
     dynamicSegmentPatterns: ["numeric", "uuid", "hash"],
   });
@@ -33,3 +34,41 @@ test("falls back to unknown path on invalid URL", () => {
   assert.equal(endpoint, "GET /unknown");
 });
 
+test("does NOT parametrize readable English slugs (HASH_PATTERN false-positive fix)", () => {
+  // These are 16+ char alphanumeric-with-hyphen slugs that should NOT match hex hash pattern
+  for (const slug of [
+    "content-type-validation",
+    "user-preferences-settings",
+    "my-feature-flag-name",
+  ]) {
+    const endpoint = normalizeEndpointKey({
+      input: `https://api.example.com/flags/${slug}`,
+      method: "GET",
+      dynamicSegmentPatterns: ["hash"],
+    });
+    assert.equal(
+      endpoint,
+      `GET /flags/${slug}`,
+      `slug "${slug}" should not be parametrized`,
+    );
+  }
+});
+
+test("parametrizes hex hashes (git SHAs, MD5s) with HASH_PATTERN", () => {
+  for (const hash of [
+    "a1b2c3d4e5f6a7b8",
+    "abc123def456abc1def0",
+    "deadbeefcafebabe",
+  ]) {
+    const endpoint = normalizeEndpointKey({
+      input: `https://api.example.com/commits/${hash}`,
+      method: "GET",
+      dynamicSegmentPatterns: ["hash"],
+    });
+    assert.equal(
+      endpoint,
+      "GET /commits/:param",
+      `hash "${hash}" should be parametrized`,
+    );
+  }
+});

@@ -3,11 +3,11 @@ import type { DynamicSegmentPattern } from "./types";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const NUMERIC_PATTERN = /^\d+$/;
-const HASH_PATTERN = /^[A-Za-z0-9_-]{16,}$/;
+const HASH_PATTERN = /^[0-9a-fA-F]{16,}$/;
 
 function shouldParametrize(
   segment: string,
-  patterns: DynamicSegmentPattern[]
+  patterns: DynamicSegmentPattern[],
 ): boolean {
   for (const pattern of patterns) {
     if (pattern === "numeric" && NUMERIC_PATTERN.test(segment)) {
@@ -25,13 +25,15 @@ function shouldParametrize(
 
 function normalizePathname(
   pathname: string,
-  patterns: DynamicSegmentPattern[]
+  patterns: DynamicSegmentPattern[],
 ): string {
   const segments = pathname
     .replace(/\/+/g, "/")
     .split("/")
     .filter((segment) => segment.length > 0)
-    .map((segment) => (shouldParametrize(segment, patterns) ? ":param" : segment));
+    .map((segment) =>
+      shouldParametrize(segment, patterns) ? ":param" : segment,
+    );
 
   if (segments.length === 0) {
     return "/";
@@ -78,7 +80,7 @@ export function normalizeEndpointKey(args: {
 
   const pathname = normalizePathname(
     parsed.pathname,
-    args.dynamicSegmentPatterns
+    args.dynamicSegmentPatterns,
   );
   const queryKeys = Array.from(new Set(Array.from(parsed.searchParams.keys())))
     .sort((a, b) => a.localeCompare(b))
