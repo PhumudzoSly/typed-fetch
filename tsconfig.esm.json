@@ -6,6 +6,7 @@
         "outDir": "./dist/esm"
     },
     "exclude": [
-        "src/cli.ts"
+        "src/cli.ts",
+        "src/generated"
     ]
 }

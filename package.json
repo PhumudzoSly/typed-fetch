@@ -88,6 +88,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.12",
+    "hono": ">=3",
     "@types/node": "^22.13.14",
     "@types/picomatch": "^4.0.3",
     "@types/react": "^18.0.0",

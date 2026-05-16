@@ -12,8 +12,6 @@ permissions:
 jobs:
   package-and-publish:
     runs-on: ubuntu-latest
-    env:
-      VSCE_PAT: ${{ secrets.VSCE_PAT }}
     defaults:
       run:
         working-directory: extensions/vscode-typed-fetch
@@ -54,6 +52,12 @@ jobs:
           files: extensions/vscode-typed-fetch/*.vsix
           generate_release_notes: true
 
+      - name: Check VSCE_PAT
+        id: check_pat
+        run: echo "has_pat=${{ secrets.VSCE_PAT != '' }}" >> $GITHUB_OUTPUT
+
       - name: Publish to VS Code Marketplace
-        if: env.VSCE_PAT != ''
+        if: steps.check_pat.outputs.has_pat == 'true'
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: pnpm run publish:marketplace
